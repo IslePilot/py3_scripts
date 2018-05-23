@@ -21,5 +21,5 @@ sys.path.append("..")
 VERSION = "1.0.20180520a"
 
 if __name__ == '__main__':
-    # when this file is run directly, run this code
-    print(VERSION)
+  # when this file is run directly, run this code
+  print(VERSION)
