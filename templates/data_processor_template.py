@@ -93,7 +93,7 @@ if __name__ == '__main__':
   read_delay = 0.1  # delay between network reads
     
   # DATA GATHERER/SERVER MODE
-  if True:
+  if False:
     # instance our collector object  (Data Gatherer)
     timecollector = DataCollector(timearray)
     timecollector.daemon = True     # run this process on its own until this process dies
