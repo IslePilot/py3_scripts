@@ -47,7 +47,7 @@ class DataCollector(Process):
     while True:
       # get the latest time and turn it into a list
       data = datetime.datetime.utcnow()
-      print("DataCollector running: {:s}".format(data.strftime("%Y-%m-%d %H:%M:%S.%f")))
+      print("    DataCollector: {:s}".format(data.strftime("%Y-%m-%d %H:%M:%S.%f")))
       datalist = list(data.timetuple())[:6]
       datalist.append(data.microsecond)
       
@@ -75,7 +75,7 @@ class DataUser(Process):
       with self.mp_array.get_lock():
         data = datetime.datetime(*self.mp_array[:])
       
-      print("     DataUser running: {:s}".format(data.strftime("%Y-%m-%d %H:%M:%S.%f")))
+      print(" DataUser running: {:s}".format(data.strftime("%Y-%m-%d %H:%M:%S.%f")))
 
       time.sleep(1.0)
     return
@@ -93,7 +93,7 @@ if __name__ == '__main__':
   read_delay = 0.1  # delay between network reads
     
   # DATA GATHERER/SERVER MODE
-  if False:
+  if True:
     # instance our collector object  (Data Gatherer)
     timecollector = DataCollector(timearray)
     timecollector.daemon = True     # run this process on its own until this process dies
@@ -121,7 +121,7 @@ if __name__ == '__main__':
     with timearray.get_lock():
       arraytime = datetime.datetime(*timearray[:])
       
-    print("      Main Thread Array: {:s}".format(arraytime.strftime("%Y-%m-%d %H:%M:%S.%f")))
+    print("Main Thread Array: {:s}".format(arraytime.strftime("%Y-%m-%d %H:%M:%S.%f")))
     
     # wait a bit
     time.sleep(1.0)

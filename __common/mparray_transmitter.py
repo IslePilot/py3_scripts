@@ -54,10 +54,10 @@ class MPArrayServer(Process):
     with Listener(address, authkey = self.password) as listener:
       while True:
         # wait for a connection here
-        print("MPArrayServer: Waiting for connection...")
+        #print("MPArrayServer: Waiting for connection...")
         try:
           with listener.accept() as conn:
-            print("MPArrayServer: Connection accepted from", listener.last_accepted)
+            #print("MPArrayServer: Connection accepted from", listener.last_accepted)
             # send our data
             with self.mp_array.get_lock():
               conn.send(self.mp_array[:]) # Note: not data length aware-fully generic
@@ -96,7 +96,7 @@ class MPArrayReceiver(Process):
       try:
         with Client(address, authkey=self.password) as conn:
           data = conn.recv()
-          print("MPArrayReceiver: Data Recieved")
+          #print("MPArrayReceiver: Data Recieved")
           # save the data
           with self.mp_array.get_lock():
             for i in range(len(data)):
