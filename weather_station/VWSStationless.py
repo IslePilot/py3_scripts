@@ -261,8 +261,7 @@ class WxDataCollector():
     self.last_metar_altim_in_hg = altim_in_hg
     
     return
-    
-    
+  
   @staticmethod
   def get_weather_condition_code(text):
     # Not all sky covers are available, so use some logic

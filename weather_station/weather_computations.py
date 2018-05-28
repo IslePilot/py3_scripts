@@ -122,7 +122,7 @@ def compute_heat_index(temp_f, rh_pct):
     heat_index += ((rh_pct-85.0)/10.0) * ((87.0-temp_f)/5.0)
   
   if heat_index < 80.0:
-    heat_index =  0.5 * (temp_f + 61.0 + [(temp_f-68.0)*1.2] + (rh_pct*0.094))
+    heat_index =  0.5 * (temp_f + 61.0 + ((temp_f-68.0)*1.2) + (rh_pct*0.094))
   
   return heat_index  
   
