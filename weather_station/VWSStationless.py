@@ -34,8 +34,8 @@ from multiprocessing import Array
 VERSION = "1.0.20180522a"
 
 class WxDataCollector():
-  BAD_INT = -999
-  BAD_FLOAT = -999.99
+  BAD_INT = 0
+  BAD_FLOAT = 0
   
   def __init__(self, wx_data_directory, metar_site, elevation_ft):
     # save the input
@@ -154,13 +154,8 @@ class WxDataCollector():
       # publish the data to our data file
       self.write_data_files()
       
-      # show the user what we have
-      print("Time: {:04d}-{:02d}-{:02d} {:02d}:{:02d}:{:02d}".format(self.data['year'][0],
-                                                                     self.data['month'][0],
-                                                                     self.data['day'][0],
-                                                                     self.data['hour'][0],
-                                                                     self.data['minute'][0],
-                                                                     self.data['second'][0]))
+      # show the user we are running
+      print("{:s}".format(datetime.datetime.now(pytz.UTC).strftime("%Y-%m-%d %H:%M:%S.%f")), end="\r", flush=True)
       
       # wait a bit for the next loop
       time.sleep(3.0)
@@ -220,6 +215,8 @@ class WxDataCollector():
     # if the timestamp didn't change, nothing changed, so we are done
     if self.last_metar_timestamp != None and timestamp == self.last_metar_timestamp:
       return
+    
+    print("New METAR Data:", timestamp, temp_c, dewpoint_c, rh_pct, wind_dir_deg, wind_speed_kt, wind_gust_kt, code, altim_in_hg)
     
     # get some things in better units
     temp_f = wx.temp_c_to_f(temp_c)
