@@ -34,6 +34,12 @@ def speed_kt_to_mph(speed_kt):
 def speed_mph_to_kt(speed_mph):
   return speed_mph * 5280.0 / 6076.12
 
+def pressure_mbar_to_inhg(pressure_mbar):
+  return pressure_mbar / 33.863886666667
+
+def pressure_inhg_to_mbar(pressure_inhg):
+  return pressure_inhg * 33.863886666667
+
 def calc_vapor_saturation_pressure_hPa(temp_c):
   """from https://www.vaisala.com/sites/default/files/documents/Humidity_Conversion_Formulas_B210973EN-F.pdf"""
   # constants
@@ -127,18 +133,58 @@ def compute_heat_index(temp_f, rh_pct):
   return heat_index  
   
   return 
+
+def compute_slp_from_station(station_pressure_inhg, elevation_ft, temp_c):
+  p = pressure_inhg_to_mbar(station_pressure_inhg)
+  h = 0.3048*elevation_ft
+  c = (1.0 - (0.0065*h)/(temp_c+273.15+0.0065*h))**-5.257
+  p0 = p*c
+  return pressure_mbar_to_inhg(p0)
+
+def compute_station_from_slp(slp_in_hg, elevation_ft, temp_c):
+  p0 = pressure_inhg_to_mbar(slp_in_hg)
+  h = 0.3048*elevation_ft
+  c = (1.0 - (0.0065*h)/(temp_c+273.15+0.0065*h))**-5.257
+  p = p0/c
+  return pressure_mbar_to_inhg(p)
+
+def compute_station_from_altimeter(altimeter_inhg, elevation_ft):
+  return (altimeter_inhg**0.1903-(1.313e-5*elevation_ft))**5.255
+
+def compute_altimeter_from_station(station_inhg, elevation_ft):
+  pb = 29.92126 # inHg
+  tb = 288.15 # kelvin
+  lb = -0.00198 # degK/ft
+  hb = 0  # feet
+  r = 89494.6
+  g0 = 32.17405 # ft/s**2
+  m = 28.9644 # g/mol
+  
+  exp = (g0*m)/(r*lb)
+  paren = tb/(tb+lb*(elevation_ft-hb))
+  
+  press = pb*paren**exp
+  delta = pb-press
+  return delta+station_inhg
+  
+
 if __name__ == '__main__':
-  # when this file is run directly, run this code
-  print(VERSION)
   
-  # test 1
-  temp_f = 92.3
-  rh_pct = 9.0
-  dp_f = 25.3
+  # using home station inside
+  print(compute_altimeter_from_station(24.85, 5106.7)) # 29.975 KEIK=30.02
+  print(compute_slp_from_station(24.85, 5106.7, temp_f_to_c(71.06))) # 29.672
+
+  print(compute_station_from_altimeter(30.008858, 5106.7))  # 22.53
+  print(pressure_mbar_to_inhg(1005.4)) # 29.69
+  print(compute_station_from_slp(29.69, 75106.7, 21.1))  # 22.74
   
-  dp_calc_c = calc_dewpoint_c(temp_f_to_c(temp_f), rh_pct)
-  print(temp_c_to_f(dp_calc_c))
   
-  rh_calc = calc_rh_pct(temp_f_to_c(temp_f), dp_calc_c)
-  print(rh_calc)
+  
+  print()
+
+
+  
+  
+  
+
 

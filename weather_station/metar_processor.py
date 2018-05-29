@@ -19,6 +19,7 @@ import VWSStationless as vws
 
 import datetime
 import time
+import pytz
 
 from multiprocessing import Process
 from multiprocessing import Array
@@ -26,12 +27,54 @@ from multiprocessing import Array
 import urllib
 import bs4 as bs
 
+from collections import namedtuple
 
 # define a version for this file
 VERSION = "1.0.2018-05-26a"
 
 class MetarCollector(Process):
+  BAD_FLOAT = -99999.999
+  
   URL = "https://aviationweather.gov/adds/dataserver_current/httpparam?dataSource=metars&requestType=retrieve&format=xml&hoursBeforeNow=3&mostRecent=true&stationString="
+  
+  # create our METAR named tuple
+  field_names = ['raw_text']
+  field_names.append('station_id')  # four character alpha numeric
+  field_names.append('observation_time')  # timezone aware datetime object
+  field_names.append('latitude')
+  field_names.append('longitude')
+  field_names.append('temp_c')
+  field_names.append('dewpoint_c')
+  field_names.append('wind_dir_degrees')  # 0 degrees indicates variable
+  field_names.append('wind_speed_kt')
+  field_names.append('wind_gust_kt')
+  field_names.append('visibility_statute_mi')
+  field_names.append('altim_in_hg')
+  field_names.append('sea_level_pressure_mb')
+  field_names.append('wx_string')
+  field_names.append('sky_cover_1')
+  field_names.append('cloud_base_ft_agl_1')
+  field_names.append('sky_cover_2')
+  field_names.append('cloud_base_ft_agl_2')
+  field_names.append('sky_cover_3')
+  field_names.append('cloud_base_ft_agl_3')
+  field_names.append('sky_cover_4')
+  field_names.append('cloud_base_ft_agl_4')
+  field_names.append('flight_category')
+  field_names.append('three_hr_pressure_tendency_mb')
+  field_names.append('maxT_c')  # max temp in past 6 hours
+  field_names.append('minT_c')  # min temp in past 6 hours
+  field_names.append('maxT24hr_c')  # max temp in past 24 hours
+  field_names.append('minT24hr_c')  # min temp in past 24 hours
+  field_names.append('precip_in') # precip since last METAR
+  field_names.append('pcp3hr_in') # precip in past 3 hours
+  field_names.append('pcp6hr_in') # precip in past 6 hours
+  field_names.append('pcp24hr_in') # precip in past 24 hours
+  field_names.append('snow_in') # snow depth on ground
+  field_names.append('vert_vis_ft') # vertical visibility
+  field_names.append('metar_type')
+  field_names.append('elevation_m')
+  METAR = namedtuple('METAR', field_names)
   
   def __init__(self, mp_array, station_id, countdown = False):
     """Instance a sample data collector.  This sample simply reads the local clock.
@@ -57,10 +100,31 @@ class MetarCollector(Process):
       # get the latest METAR and parse it
       data_tuple = self.get_latest_metar()
       
+      # compute a few items
+      # if we don't have a gust, use the normal wind
+      if data_tuple.wind_gust_kt:
+        gust = float(data_tuple.wind_gust_kt)
+      else:
+        gust = float(data_tuple.wind_speed_kt)
+      
+      # determine the most significant weather
+      if data_tuple.wx_string != None:
+        code = vws.WxDataCollector.get_weather_condition_code(data_tuple.wx_string.split(' ')[0])
+      else:
+        code = vws.WxDataCollector.get_weather_condition_code(data_tuple.sky_cover_1)
+      
       # now share the data
       with self.mp_array.get_lock():
-        for i in range(len(data_tuple)):
-          self.mp_array[i]=float(data_tuple[i])
+        # save the data needed for VWS:
+        self.mp_array[0] = data_tuple.observation_time.timestamp()
+        self.mp_array[1] = data_tuple.temp_c
+        self.mp_array[2] = data_tuple.dewpoint_c
+        self.mp_array[3] = wx.calc_rh_pct(data_tuple.temp_c, data_tuple.dewpoint_c)
+        self.mp_array[4] = float(data_tuple.wind_dir_degrees)
+        self.mp_array[5] = float(data_tuple.wind_speed_kt)
+        self.mp_array[6] = gust
+        self.mp_array[7] = code
+        self.mp_array[8] = data_tuple.altim_in_hg
       
       # countdown to the next update
       if self.countdown:
@@ -75,61 +139,128 @@ class MetarCollector(Process):
     return
   
   def get_latest_metar(self):
-    # raw_text: KBID 271456Z AUTO 06015G22KT 1 1/4SM -RA BR OVC002 12/12 A3010 RMK AO2 RAB24 SLP195 P0001 6//// T01220122 TSNO
-    # visibility_statute_mi: 1.25
-    # altim_in_hg: 30.100393
-
+    """Get the latest METAR data.
     
-    # get the latest METAR and make soup
-    soup = bs.BeautifulSoup(urllib.request.urlopen(self.url).read(), 'lxml')
-        
+    returns a Metar Named Tuple"""
+    # get our web data
+    sauce = None
+    while sauce == None:
+      try:
+        with urllib.request.urlopen(self.url, timeout=15) as response:
+          sauce = response.read()
+      except urllib.error.URLError as err:
+        print("MetarCollector.get_latest_metar: URLError")
+        print(err)
+        time.sleep(15)
+      except:
+        print("MetarCollector.get_latest_metar: Timeout")
+        time.sleep(15)
+    
+    # now make soup with our sauce
+    soup = bs.BeautifulSoup(sauce, 'lxml')
+    
     # get the items we need
-    # show the user we read something
-    raw_text = soup.find('raw_text').text
-    print("MetarCollector: METAR Read:", raw_text)
+    data = []
+    data.append(self.search_soup(soup, 'raw_text', 'string', show=True))
+    data.append(self.search_soup(soup, 'station_id', 'string', show=False))
+    data.append(self.search_soup(soup, 'observation_time', 'utc', show=False))
+    data.append(self.search_soup(soup, 'latitude', 'float', show=False))
+    data.append(self.search_soup(soup, 'longitude', 'float', show=False))
+    data.append(self.search_soup(soup, 'temp_c', 'float', show=False))
+    data.append(self.search_soup(soup, 'dewpoint_c', 'float', show=False))
+    data.append(self.search_soup(soup, 'wind_dir_degrees', 'int', show=False))
+    data.append(self.search_soup(soup, 'wind_speed_kt', 'int', show=False))
+    data.append(self.search_soup(soup, 'wind_gust_kt', 'int', show=False))
+    data.append(self.search_soup(soup, 'visibility_statute_mi', 'float', show=False))
+    data.append(self.search_soup(soup, 'altim_in_hg', 'float', show=False))
+    data.append(self.search_soup(soup, 'sea_level_pressure_mb', 'float', show=False))
+    data.append(self.search_soup(soup, 'wx_string', 'string', show=False))
+    data += self.search_soup(soup, 'sky_condition', 'attrib', show=False)
+    data.append(self.search_soup(soup, 'flight_category', 'string', show=False))
+    data.append(self.search_soup(soup, 'three_hr_pressure_tendency_mb', 'float', show=False))
+    data.append(self.search_soup(soup, 'maxT_c', 'float', show=False))
+    data.append(self.search_soup(soup, 'minT_c', 'float', show=False))
+    data.append(self.search_soup(soup, 'maxT24hr_c', 'float', show=False))
+    data.append(self.search_soup(soup, 'minT24hr_c', 'float', show=False))
+    data.append(self.search_soup(soup, 'precip_in', 'float', show=False))
+    data.append(self.search_soup(soup, 'pcp3hr_in', 'float', show=False))
+    data.append(self.search_soup(soup, 'pcp6hr_in', 'float', show=False))
+    data.append(self.search_soup(soup, 'pcp24hr_in', 'float', show=False))
+    data.append(self.search_soup(soup, 'snow_in', 'float', show=False))
+    data.append(self.search_soup(soup, 'vert_vis_ft', 'int', show=False))
+    data.append(self.search_soup(soup, 'metar_type', 'string', show=False))
+    data.append(self.search_soup(soup, 'elevation_m', 'float', show=False))
     
-    # get the data timestamp
-    time_string = soup.find('observation_time').text
-    obs_time = datetime.datetime.strptime(time_string, "%Y-%m-%dT%H:%M:%SZ") # 2018-05-27T19:17:00Z
-    #print("Metar Time:", obs_time.strftime("%Y-%m-%d %H:%M:%S"))
-    
-    # get the temp, dewpoint, and relative humidity
-    temp_c = float(soup.find('temp_c').text)
-    dewpoint_c = float(soup.find('dewpoint_c').text)
-    rh_pct = wx.calc_rh_pct(temp_c, dewpoint_c)
-    #print("Temp:{:.1f} Dewpoint:{:.1f} Relative Humidity:{:.1f}".format(temp_c, dewpoint_c, rh_pct))
-    
-    # get the wind information
-    wind_dir_deg = float(soup.find('wind_dir_degrees').text)
-    wind_speed_kt = float(soup.find('wind_speed_kt').text)
-    gust = soup.find('wind_gust_kt')
-    if gust:
-      wind_gust_kt = float(gust.text)
+    # return our named tuple
+    return MetarCollector.METAR(*data)
+  
+  def search_soup(self, soup, tag, fmt, show=False):
+    # get our item(s)
+    if fmt == 'attrib':
+      items = soup.find_all(tag)
     else:
-      wind_gust_kt = wind_speed_kt
-    #print("Wind: {:.1f} at {:.1f} gusting {:.1f}".format(wind_dir_deg, wind_speed_kt, wind_gust_kt))
+      # look for our item
+      item = soup.find(tag)
+      
+      # if we didn't find anything, then we are done, otherwise get the data
+      if item == None:
+        if show:
+          print("{:s}:".format(tag), "None")
+        return None
+      else:
+        text = item.text
     
-    # combine wx_string and sky condition into a single condition for VWS
-    wx_str = soup.find('wx_string')
-    if wx_str:
-      # find the first 2 letter item
-      condition = wx_str.text.split(" ")[0]
-    else:
-      # if no significant weather exists, use the sky cover
-      condition = soup.find('sky_condition')['sky_cover']
-    #print("Combined VWS Weather Condtion:", condition)
+    # now process the data based on our format
+    if fmt == 'string':
+      if show:
+        print("{:s}:".format(tag), text)
+      return text
     
-    # find the condition code
-    code = vws.WxDataCollector.get_weather_condition_code(condition)
+    elif fmt == 'utc':
+      # this is a time string, parse it into an aware datetime, example: 2018-05-27T19:17:00Z
+      obs_time = datetime.datetime.strptime(text, "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=pytz.UTC)
+      if show:
+        print("{:s}:".format(tag), obs_time.strftime("%Y-%m-%d %H:%M:%S %Z"))
+      return obs_time
     
-    # get other data of interest that we probably can't use with VWS
-    visibility_statute_mi = float(soup.find('visibility_statute_mi').text)
-    altim_in_hg = float(soup.find('altim_in_hg').text)
+    elif fmt == 'float':
+      val = float(text)
+      if show:
+        print("{:s}:".format(tag), val)
+      return val
     
-    #print("VWS Code:", code)
+    elif fmt == 'int':
+      val = int(text)
+      if show:
+        print("{:s}:".format(tag), val)
+      return val
     
-    return obs_time.timestamp(), temp_c, dewpoint_c, rh_pct, wind_dir_deg, wind_speed_kt, wind_gust_kt, code, visibility_statute_mi, altim_in_hg
+    elif fmt == 'attrib':
+      data = []
+      for item in items:
+        data.append(item['sky_cover'])
+        if data[-1] != 'CLR' and data[-1] != 'SKC' and data[-1] != 'CAVOK':
+          data.append(float(item['cloud_base_ft_agl']))
+        else:
+          data.append(None)
+      # pad the rest of data with None
+      for i in range(len(items), 4):
+        i=i # noop to get rid of unused variable warning
+        data.append(None) # missing sky cover
+        data.append(None) # missing cloud base
+      
+      if show:
+        print("{:s} 1:".format(tag), data[0], data[1])
+        print("{:s} 2:".format(tag), data[2], data[3])
+        print("{:s} 3:".format(tag), data[4], data[5])
+        print("{:s} 4:".format(tag), data[6], data[7])
 
+      return data
+    
+    else:
+      print('MetarCollector.search_soup: Unknown format Requested')
+
+    return None
 
 if __name__ == '__main__':
   # when this file is run directly, run this code
@@ -137,7 +268,7 @@ if __name__ == '__main__':
   
   # regardless of mode, define a few basics
   # create our shared memory object
-  timearray = Array('f', 10)
+  timearray = Array('f', 9)
   read_delay = 15.0  # delay between network reads
   metar_station = 'KEIK'
     

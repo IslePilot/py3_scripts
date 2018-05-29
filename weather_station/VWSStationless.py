@@ -23,6 +23,7 @@ import weather_computations as wx
 import metar_processor as metar
 
 import datetime
+import pytz
 import time
 
 from collections import OrderedDict
@@ -36,7 +37,7 @@ class WxDataCollector():
   BAD_INT = -999
   BAD_FLOAT = -999.99
   
-  def __init__(self, wx_data_directory, metar_site):
+  def __init__(self, wx_data_directory, metar_site, elevation_ft):
     # save the input
     self.path = wx_data_directory
     
@@ -44,7 +45,7 @@ class WxDataCollector():
     filetools.mkdir("{:s}/VWSInput".format(self.path))
     
     # build our shared memory datasets
-    self.metar_array = Array('f', 10)
+    self.metar_array = Array('f', 9)
     
     # instance the data collectors
     self.gather_metar_data(station_id = metar_site)
@@ -54,6 +55,7 @@ class WxDataCollector():
     self.build_data_format()
     
     # initialize some data
+    self.elevation_ft = elevation_ft
     self.last_metar_timestamp = None
     self.last_metar_temp_deg_f = None
     self.last_metar_altim_in_hg = None
@@ -89,9 +91,9 @@ class WxDataCollector():
     
     # from sensors
     self.data['inside_humidity_pct'] = [WxDataCollector.BAD_FLOAT, "{:.2f},", "Inside Humidity (%)"]
-    self.data['outside_humidity_pct'] = [WxDataCollector.BAD_FLOAT, "{:.2f},", "Outside Humidity (%)"]
+    self.data['outside_humidity_pct'] = [WxDataCollector.BAD_FLOAT, "{:.2f},", "Outside Humidity (%)"]  # METAR for now
     self.data['inside_temp_degF'] = [WxDataCollector.BAD_FLOAT, "{:.2f},", "Inside Temperature (deg F)"]
-    self.data['outside_temp_degF'] = [WxDataCollector.BAD_FLOAT, "{:.2f},", "Outiside Temperature (deg F)"]
+    self.data['outside_temp_degF'] = [WxDataCollector.BAD_FLOAT, "{:.2f},", "Outiside Temperature (deg F)"]  # METAR for now
     self.data['barometer_in'] = [WxDataCollector.BAD_FLOAT, "{:.2f},", "Sea Level Pressure (in Hg)"]  # METAR for now
     
     # from rain gauge
@@ -193,8 +195,8 @@ class WxDataCollector():
   
   def _get_time(self):
     """Get the time from the local clock.  This clock should be set via NTP"""
-    # get the current time in UTC
-    timenow = datetime.datetime.utcnow()
+    # get the current time in UTC (make sure we are timezone aware)
+    timenow = datetime.datetime.now(pytz.UTC)
     
     # save the data to our data
     self.data['year'][0] = timenow.year
@@ -209,7 +211,7 @@ class WxDataCollector():
   def _get_metar(self):
     # get the current metar data
     with self.metar_array.get_lock():
-      timestamp, temp_c, dewpoint_c, rh_pct, wind_dir_deg, wind_speed_kt, wind_gust_kt, code, visibility_statute_mi, altim_in_hg = self.metar_array[:]
+      timestamp, temp_c, dewpoint_c, rh_pct, wind_dir_deg, wind_speed_kt, wind_gust_kt, code, altim_in_hg = self.metar_array[:]
     
     # if the timestamp is zero, we have no data, so just return for now
     if round(timestamp) == 0:
@@ -242,9 +244,12 @@ class WxDataCollector():
     self.data['wind_gust_mph'][0] = gust_speed_mph
     self.data['wind_direction_deg'][0] = wind_dir_deg
         
-    self.data['barometer_in'][0] = altim_in_hg
+    self.data['barometer_in'][0] = wx.compute_station_from_altimeter(altim_in_hg, self.elevation_ft)
     self.data['outdoor_heat_index_degF'][0] = wx.compute_heat_index(temp_f, rh_pct)
     self.data['dew_point_degF'][0] = dewpoint_f
+    
+    self.data['outside_temp_degF'][0] = temp_f
+    self.data['outside_humidity_pct'][0] = rh_pct
     
     self.data['wind_chill_degF'][0] = wx.compute_wind_chill(temp_f, wind_speed_mph)
     if self.last_metar_timestamp != None and round(self.last_metar_timestamp) != 0:
@@ -254,6 +259,7 @@ class WxDataCollector():
       self.data['barometer_rate_in_per_hour'][0] = d_press/d_time_hr
     else:
       self.data['barometer_rate_in_per_hour'][0] = 0.0
+      
     
     # save the data we need for the next update
     self.last_metar_timestamp = timestamp
@@ -355,10 +361,11 @@ if __name__ == '__main__':
   
   wx_data_directory = r"C:\WX"
   metar_site = 'KEIK'
+  pressure_sensor_elevation_ft = 5094.0
   
   while True:
     # this should never return
-    wx_data_collector = WxDataCollector(wx_data_directory, metar_site)
+    wx_data_collector = WxDataCollector(wx_data_directory, metar_site, pressure_sensor_elevation_ft)
     
     # if we get here, give it a few seconds and restart
     time.sleep(10.0)
