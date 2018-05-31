@@ -37,7 +37,7 @@ class WxDataCollector():
   BAD_INT = 0
   BAD_FLOAT = 0
   
-  def __init__(self, wx_data_directory, metar_site, elevation_ft):
+  def __init__(self, wx_data_directory, metar_site, elevation_ft, timezone):
     # save the input
     self.path = wx_data_directory
     
@@ -56,6 +56,7 @@ class WxDataCollector():
     
     # initialize some data
     self.elevation_ft = elevation_ft
+    self.timezone = timezone
     self.last_metar_timestamp = None
     self.last_metar_temp_deg_f = None
     self.last_metar_altim_in_hg = None
@@ -191,7 +192,10 @@ class WxDataCollector():
   def _get_time(self):
     """Get the time from the local clock.  This clock should be set via NTP"""
     # get the current time in UTC (make sure we are timezone aware)
-    timenow = datetime.datetime.now(pytz.UTC)
+    now_utc = datetime.datetime.now(pytz.UTC)
+    
+    # convert to our local timezone
+    timenow = now_utc.astimezone(self.timezone)
     
     # save the data to our data
     self.data['year'][0] = timenow.year
@@ -359,10 +363,11 @@ if __name__ == '__main__':
   wx_data_directory = r"C:\WX"
   metar_site = 'KEIK'
   pressure_sensor_elevation_ft = 5094.0
+  timezone = pytz.timezone('US/Mountain')
   
   while True:
     # this should never return
-    wx_data_collector = WxDataCollector(wx_data_directory, metar_site, pressure_sensor_elevation_ft)
+    wx_data_collector = WxDataCollector(wx_data_directory, metar_site, pressure_sensor_elevation_ft, timezone)
     
     # if we get here, give it a few seconds and restart
     time.sleep(10.0)
