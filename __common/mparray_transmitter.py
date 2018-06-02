@@ -96,7 +96,6 @@ class MPArrayReceiver(Process):
       try:
         with Client(address, authkey=self.password) as conn:
           data = conn.recv()
-          #print("MPArrayReceiver: Data Recieved")
           # save the data
           with self.mp_array.get_lock():
             for i in range(len(data)):
