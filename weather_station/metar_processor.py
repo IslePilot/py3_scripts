@@ -87,6 +87,10 @@ class MetarCollector(Process):
     # build our URL
     self.url = "{:s}{:s}".format(self.URL, station_id)
     
+    # initialize some values
+    self.last_temp_c = -999.0
+    self.last_dewpoint_c = -999.0
+    
     # run the base class constructor
     super().__init__()
     return
@@ -113,18 +117,50 @@ class MetarCollector(Process):
       else:
         code = vws.WxDataCollector.get_weather_condition_code(data_tuple.sky_cover_1)
       
+      if data_tuple.temp_c != None:
+        temp_c = data_tuple.temp_c
+        self.last_temp_c = temp_c
+      else:
+        temp_c = self.last_temp_c
+      
+      if data_tuple.dewpoint_c != None:
+        dewpoint_c = data_tuple.dewpoint_c
+        self.last_dewpoint_c = dewpoint_c
+      else:
+        dewpoint_c = self.last_dewpoint_c
+      
+      if temp_c > -995.0 or dewpoint_c > -999.0:
+        rh_pct = wx.calc_rh_pct(temp_c, dewpoint_c)
+      else:
+        rh_pct = -999.0
+      
+      if data_tuple.wind_dir_degrees != None:
+        wind_dir_degrees = float(data_tuple.wind_dir_degrees)
+      else:
+        wind_dir_degrees = 0.0
+      
+      if data_tuple.wind_speed_kt != None:
+        wind_speed_kt = float(data_tuple.wind_speed_kt)
+      else:
+        wind_speed_kt = 0.0
+      
+      if data_tuple.altim_in_hg != None:
+        altim_in_hg = data_tuple.altim_in_hg
+      else:
+        altim_in_hg = 0.0
+        
       # now share the data
       with self.mp_array.get_lock():
         # save the data needed for VWS:
         self.mp_array[0] = data_tuple.observation_time.timestamp()
-        self.mp_array[1] = data_tuple.temp_c
-        self.mp_array[2] = data_tuple.dewpoint_c
-        self.mp_array[3] = wx.calc_rh_pct(data_tuple.temp_c, data_tuple.dewpoint_c)
-        self.mp_array[4] = float(data_tuple.wind_dir_degrees)
-        self.mp_array[5] = float(data_tuple.wind_speed_kt)
+        self.mp_array[1] = temp_c
+        self.mp_array[2] = dewpoint_c
+        self.mp_array[3] = rh_pct
+        self.mp_array[4] = wind_dir_degrees
+        self.mp_array[5] = wind_speed_kt
         self.mp_array[6] = gust
         self.mp_array[7] = code
-        self.mp_array[8] = data_tuple.altim_in_hg
+        self.mp_array[8] = altim_in_hg
       
       # countdown to the next update
       if self.countdown:

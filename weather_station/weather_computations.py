@@ -40,6 +40,15 @@ def pressure_mbar_to_inhg(pressure_mbar):
 def pressure_inhg_to_mbar(pressure_inhg):
   return pressure_inhg * 33.863886666667
 
+def pressure_pascals_to_inhg(pressure_pascals):
+  return pressure_pascals*0.000295299830714
+
+def distance_m_to_ft(distance_m):
+  return distance_m/0.3048
+
+def distnace_ft_to_m(distance_f):
+  return distance_f*0.3048
+
 def calc_vapor_saturation_pressure_hPa(temp_c):
   """from https://www.vaisala.com/sites/default/files/documents/Humidity_Conversion_Formulas_B210973EN-F.pdf"""
   # constants
@@ -167,6 +176,9 @@ def compute_altimeter_from_station(station_inhg, elevation_ft):
   delta = pb-press
   return delta+station_inhg
   
+def compute_density_altitude(pressure_inhg, temp_f):
+  return 145442.16 * (1-(17.326*pressure_inhg/(459.67+temp_f))**0.235)
+
 
 if __name__ == '__main__':
   
