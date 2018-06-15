@@ -155,7 +155,7 @@ class WxDataCollector():
     # from rain gauge
     self.data['total_rain_in'] = [WxDataCollector.BAD_FLOAT, "{:.2f},", "Total Rain (in)"]
     self.data['daily_rain_in'] = [WxDataCollector.BAD_FLOAT, "{:.2f},", "Daily Rain (in)"]
-    self.data['hourly_rain_in'] = [WxDataCollector.BAD_FLOAT, "{:.2f},", "Hourly Rain (in)"]
+    self.data['hourly_rain_in'] = [WxDataCollector.BAD_FLOAT, "{:.2f},", "Hourly Rain (in)"]  # Fence Station
     
     # from METAR
     self.data['sky_condition'] = [WxDataCollector.BAD_INT, "{:d},", "Sky Condition"] # METAR
@@ -192,7 +192,7 @@ class WxDataCollector():
     
     # from rain gauge
     self.data['monthly_rain_in'] = [WxDataCollector.BAD_FLOAT, "{:.2f},", "Monthly Rain (in)"]
-    self.data['yearly_rain_in'] = [WxDataCollector.BAD_FLOAT, "{:.2f}\n", "Yearly Rain (in)"]
+    self.data['yearly_rain_in'] = [WxDataCollector.BAD_FLOAT, "{:.2f},", "Yearly Rain (in)"]
     
     return
   
@@ -228,10 +228,15 @@ class WxDataCollector():
     data_string = ""
     for value in self.data.values():
       header_string += value[2] + ","
-      data_string += value[1].format(value[0])
+      if value[0] != None:
+        data_string += value[1].format(value[0])
+      else:
+        data_string += ","
     # remove the extra comma and replace with a newline
     header_string = header_string[:-1]
     header_string += "\n"
+    data_string = data_string[:-1]
+    data_string += "\n"
     
     # show what we built
     #print(header_string)
@@ -356,52 +361,56 @@ class WxDataCollector():
     #self.data['dew_point_degF'][0] = wx.temp_c_to_f(dewpoint_c)
     
     datatime = datetime.datetime.fromtimestamp(fence_data.timestamp, tz=pytz.UTC)
-    print("==========================================================================")
-    print("Fence Station: {:s}".format(datatime.strftime("%Y-%m-%d %H:%M:%S.%f %Z")))
-    print("Fence Station: Temperature (F):{:.2f} Humidity:{:.1f}".format(fence_data.temp_f, fence_data.rh_pct))
-    print("Fence Station: Pressure (inHg):{:.2f} Sea-Level Pressure:{:.2f}".format(fence_data.press_inhg, fence_data.slp_inhg))
-    print("Fence Station: Pressure Altitude:{:.1f} Density Altitude:{:.1f}".format(fence_data.pa_ft, fence_data.da_ft))
-    print("Fence Station: New Rain:{:.2f} Total Rain:{:.2f}".format(fence_data.int_rain_in, fence_data.total_rain_in))
-    print("Fence Station: CPU Temp:{:.2f} Sensor Temp:{:.2f}".format(fence_data.cpu_temp_f, fence_data.sensor_temp_f))
+    #===========================================================================
+    # print("==========================================================================")
+    # print("Fence Station: {:s}".format(datatime.strftime("%Y-%m-%d %H:%M:%S.%f %Z")))
+    # print("Fence Station: Temperature (F):{:.2f} Humidity:{:.1f}".format(fence_data.temp_f, fence_data.rh_pct))
+    # print("Fence Station: Pressure (inHg):{:.2f} Sea-Level Pressure:{:.2f}".format(fence_data.press_inhg, fence_data.slp_inhg))
+    # print("Fence Station: Pressure Altitude:{:.1f} Density Altitude:{:.1f}".format(fence_data.pa_ft, fence_data.da_ft))
+    # print("Fence Station: New Rain:{:.2f} Total Rain:{:.2f}".format(fence_data.int_rain_in, fence_data.total_rain_in))
+    # print("Fence Station: CPU Temp:{:.2f} Sensor Temp:{:.2f}".format(fence_data.cpu_temp_f, fence_data.sensor_temp_f))
+    #===========================================================================
     
     # save this for next time
     self.last_fence_data.append(fence_data)
     
-    # keep the last 15 minutes of data in memory
-    self.last_fence_data = [d for d in self.last_fence_data if fence_data.timestamp-d.timestamp < 900.0]
+    # keep the last 60 minutes of data in memory
+    self.last_fence_data = [d for d in self.last_fence_data if fence_data.timestamp-d.timestamp < 3600.0]
     
     # compute the length of our history
     history_sec = self.last_fence_data[-1].timestamp - self.last_fence_data[0].timestamp
     
     
-    # only proceed if we have ~1 minutes of data
+    # only proceed if we have ~1 minutes or more of data
     if history_sec < 60.0:
       return
     
     # we have enough history data, compute our multiplier
     multiplier = 3600.0 / history_sec
     
-    # get the temperature change rate
-    temp900 = self.last_fence_data[-1].temp_f - self.last_fence_data[0].temp_f
-    
-    self.data['outdoor_temp_rate_degF_per_hour'][0] = temp900 * multiplier
-    print("Fence Station: Outdoor Temperature Rate (degF/hr):{:.2f}".format(temp900*4))
-    
     # build lists containing a specified amount of time
     sec060 = [d for d in self.last_fence_data if fence_data.timestamp-d.timestamp < 60.0]
     sec150 = [d for d in self.last_fence_data if fence_data.timestamp-d.timestamp < 150.0]
     sec300 = [d for d in self.last_fence_data if fence_data.timestamp-d.timestamp < 300.0]
     sec600 = [d for d in self.last_fence_data if fence_data.timestamp-d.timestamp < 600.0]
+    sec900 = [d for d in self.last_fence_data if fence_data.timestamp-d.timestamp < 900.0]
+
+    # get the temperature change rate
+    temp900 = sec900[-1].temp_f - sec900[0].temp_f
+    self.data['outdoor_temp_rate_degF_per_hour'][0] = temp900 * 4
+    #===========================================================================
+    # print("Fence Station: Outdoor Temperature Rate (degF/hr):{:.2f}".format(temp900*4))
+    #===========================================================================
     
     # find the amount of rain in each time period
     rain060 = sec060[-1].total_rain_in - sec060[0].total_rain_in
     rain150 = sec150[-1].total_rain_in - sec150[0].total_rain_in
     rain300 = sec300[-1].total_rain_in - sec300[0].total_rain_in
     rain600 = sec600[-1].total_rain_in - sec600[0].total_rain_in
-    rain900 = self.last_fence_data[-1].total_rain_in - self.last_fence_data[0].total_rain_in
+    rain900 = sec900[-1].total_rain_in - sec900[0].total_rain_in
+    rain_hr = self.last_fence_data[-1].total_rain_in - self.last_fence_data[0].total_rain_in
     
     if rain060 >= 0.02:
-      # use this time frame to report rain rate
       rate = rain060 * 60
     elif rain150 >= 0.02:
       rate = rain150 * 24
@@ -409,11 +418,26 @@ class WxDataCollector():
       rate = rain300 * 12
     elif rain600 >= 0.02:
       rate = rain600 * 6
+    elif rain900 >= 0.02:
+      rate = rain900 * 4
     else:
-      rate = rain900 * multiplier
+      rate = rain_hr * multiplier
+    # set our hourly rain rate
     self.data['rain_rate_in_per_hour'][0] = rate
-    print("Fence Station: Rain Rate (in/hr):{:.2f}".format(rate))
+    #===========================================================================
+    # print("Fence Station: Rain Rate (in/hr):{:.2f}".format(rate))
+    #===========================================================================
     
+    # set the amount of hourly rain
+    self.data['hourly_rain_in'][0] = rain_hr
+    #===========================================================================
+    # print("Fence Station: Rain in the last hour:{:.2f}".format(rain_hr))
+    #===========================================================================
+    
+    self.data['total_rain_in'][0] = self.last_fence_data[-1].total_rain_in # -self.last_fence_data[-2].total_rain_in # works
+    self.data['daily_rain_in'][0] = self.last_fence_data[-1].total_rain_in
+    self.data['monthly_rain_in'][0] = self.last_fence_data[-1].total_rain_in
+    self.data['yearly_rain_in'][0] = self.last_fence_data[-1].total_rain_in
     return
   
   @staticmethod
