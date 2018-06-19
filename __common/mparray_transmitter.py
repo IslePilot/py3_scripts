@@ -61,6 +61,7 @@ class MPArrayServer(Process):
             # send our data
             with self.mp_array.get_lock():
               conn.send(self.mp_array[:]) # Note: not data length aware-fully generic
+              print("MPArrayServer: connection accepted from {}".format(listener.last_accepted))
             # this is all are sending, disconnect and go back to waiting for another connection
         except AuthenticationError:
           print("MPArrayServer: Unauthorized Access Attempted!")

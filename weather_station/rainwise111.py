@@ -141,8 +141,3 @@ if __name__ == '__main__':
     # rest a bit
     time.sleep(1.0)
 
-  return
-
-
-
-

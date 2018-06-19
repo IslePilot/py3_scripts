@@ -150,7 +150,7 @@ if __name__ == '__main__':
 
   hostname = config['FENCE_STATION']['host']
   port = int(config['FENCE_STATION']['port'])
-  authkey = config['FENCE_STATION']['authkey']
+  authkey = config['FENCE_STATION']['authkey'].encode()
 
   print(hostname, port, authkey)
 
