@@ -113,14 +113,14 @@ class WxDataCollector():
   
   def gather_fencestation_data(self, config):
     # read the config
-    hostname = config['fence_host']
-    port = int(config['fence_port'])
-    password = config['fence_authkey'].encode()
-    read_delay = float(config['fence_update_interval_sec'])
+    hostname = config['host']
+    port = int(config['port'])
+    password = config['authkey'].encode()
+    read_delay = float(config['update_interval_sec'])
     
     # initialize the fence station variables
     self.last_fence_data = []
-    self.fence_elevaion = float(config['fence_station_elevation_ft'])
+    self.fence_elevaion = float(config['station_elevation_ft'])
     
     # create and run the fence station collector
     self.fencestation_collector = txrx.MPArrayReceiver(hostname, port, password, read_delay, self.fencestation_array)
