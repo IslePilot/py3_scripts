@@ -266,11 +266,11 @@ class roof_station():
       # send our data to the shared memory
       with self.data_array.get_lock():
           self.data_array[0] = timenow.timestamp() # UNIX Timestamp
-          self.data_array[1] = data_003.direction 
-          self.data_array[2] = data_003.speed
+          self.data_array[1] = data_120.direction 
+          self.data_array[2] = data_120.speed
           self.data_array[3] = data_120.gust
-          self.data_array[4] = data_003.solar
-          self.data_array[5] = data_003.cpu_t
+          self.data_array[4] = data_120.solar
+          self.data_array[5] = data_120.cpu_t
 
       # sample output
       #     "2015-01-04 14:03:00:       Dir    Spd   Gust   Solar    CPU
