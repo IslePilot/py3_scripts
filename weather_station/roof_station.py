@@ -30,6 +30,8 @@ Revision History:
 
 import sys
 sys.path.append("..")
+import __common.mparray_transmitter as txrx
+from multiprocessing import Array
 
 import os
 import math
@@ -38,6 +40,7 @@ import datetime
 import pytz
 import signal
 import threading
+import configparser 
 
 # look into these to make this better
 #from collections import deque
@@ -50,7 +53,7 @@ import vane as vane
 import numpy as np
 
 # define a version for this file
-VERSION = "1.0.20150802a"
+VERSION = "1.0.20180701a"
 
 def signal_handler(signal, frame):
   print("You pressed Control-c.  Exiting.")
@@ -58,8 +61,9 @@ def signal_handler(signal, frame):
 signal.signal(signal.SIGINT, signal_handler)
 
 # create a named tuple to return data cleanly
-RoofData = namedtuple('RoofData', 'm_dir, v_spd, s_spd, ss_std, gust, ti, solar')
-class Averager(object):
+RoofData = namedtuple('RoofData', 'timestamp, direction, speed, gust, solar, cpu_t')
+
+class Averager():
   def __init__(self, persist_seconds):
     """This is an averager object.  It will maintain a history
     of defined parameters and return averages when asked.  It will
@@ -70,13 +74,12 @@ class Averager(object):
     # save the amount of time to persist
     self.persist_seconds = persist_seconds
 
-    # start a list of history
-    self.timestamps = []
+    # initialize our history
     self.history = []
 
     return
 
-  def add_values(self, timestamp, ws_4hz, wd_4hz, solar_insolation, gust_3second=-999.0):
+  def add_values(self, timestamp, ws_4hz, wd_4hz, solar_insolation, cpu_t, gust_3second=-999.0):
     """Add new values to the history
 
     timestamp: datetime.datetime timestamp
@@ -92,9 +95,8 @@ class Averager(object):
     v = ws_4hz * math.cos(math.radians(wd_4hz+180.0))
 
     # save the data
-    self.timestamps.append(timestamp)
-    self.history.append([ws_4hz, wd_4hz, solar_insolation, gust_3second, u, v])
-    	
+    self.history.append((timestamp, (wd_4hz, ws_4hz, gust_3second, u, v, solar_insolation, cpu_t)))
+
     return
 
   def process_data(self, timenow):
@@ -112,71 +114,55 @@ class Averager(object):
       solar: average solar insolation in W/m^2"""
 
     # first clean up the history
-    self._clean_history(timenow)
+    self._clean_history(timenow) 
    
-    # KSB return...may need to mask bad values (-999)
+    # build our list of data
+    data = [h[1] for h in self.history]
 
     # now compute the stats
-    mean = np.mean(a=self.history, axis=0)
-    std = np.std(a=self.history, axis=0)
-    maxs = np.argmax(a=self.history, axis=0)  # these are indices, not values
+    mean = np.mean(data, 0)
+    maxs = np.max(data, 0)
 
     # pull out the interesting values
-    scalar_speed = mean[0]
-    insolation = mean[2]
-    u = mean[4]
-    v = mean[5]
-    ws_std = std[0]
-    peak_gust = self.history[maxs[3]][3]
+    # our order is 0:direction, 1:speed, 2:gust, 3:u, 4:v, 5:solar, 6:cpu_t
+    scalar_speed = mean[1]
+    insolation = mean[5]
+    u = mean[3]
+    v = mean[4]
+    peak_gust = maxs[2]
+    cpu_t = mean[6]
 
     # compute vector quantities
     vector_speed = math.sqrt(u**2.0 + v**2.0)
     # atan2 returns -180 to 180 so we will end up with 0 to 360
-    mean_direction = math.degrees(math.atan2(u, v))+180.0
+    mean_direction = (math.degrees(math.atan2(u, v))+180.0)%360.0
 
-    # turbulence intensity is the standard deviation of the horizontal wind speed
-    # divided by the mean wind speed.  The min speed the anemometer can measure
-    # is 0.3 m/s, which is 0.671 mph.  Don't compute TI if the average is less than
-    # that.
-    if scalar_speed >= 0.671:
-      ti = ws_std / scalar_speed
-    else:
-      ti = -999.0
-
-    return RoofData._make([mean_direction, vector_speed, scalar_speed, ws_std, peak_gust, ti, insolation])
+    return RoofData(self.history[-1][0].timestamp(), mean_direction, scalar_speed, peak_gust, insolation, cpu_t)
 
   def _clean_history(self, timenow):
     """This function removes stale data (that which is older than we
     need to persist) from the history
 
     timenow: current time"""
-
     # compute the start time for our history
     starttime = timenow - datetime.timedelta(seconds=self.persist_seconds) 
 
-    # find the indices to delete
-    count = 0
-    for ts in self.timestamps:
-      if ts <= starttime:
-        count += 1
-      else:
-        # the timestamp is now greater, so we are done
-        break
+    self.history = [h for h in self.history if h[0] > starttime]
 
-    # now delete our range
-    if count > 0:
-      del self.timestamps[0:count]
-      del self.history[0:count]
     return
 
 
-class roof_station(object):
-  def __init__(self, data_path):
+class roof_station():
+  def __init__(self, data_array):
     """The roof weather station class.  This collects data
     from the anemometer, wind vane, and  pyranometer and
     writes the data to the archive.
 
     data_path: path to data archive"""
+
+    # save the shared memory
+    self.data_array = data_array
+
     # get the current time so we know when we started
     timenow = datetime.datetime.now(pytz.UTC)
 
@@ -194,27 +180,24 @@ class roof_station(object):
     self.pyranometer = pyranometer.Pyranometer()
     self.vane = vane.Vane()
 
-
     # instance our processors
     self.process_003sec = Averager(3)
     self.process_120sec = Averager(120)
-    #self.process_600sec = Averager(600)
 
     # initialize the daily statistics
-    self.last_date = timenow.date()
-    self.daily_windrun = 0.0
-    self.max_gust = 0.0
-    self.peak_solar = 0.0
     self.pulse_count = 0
+    self.reset_daily_stats()
+    self.current_day = timenow.day
 
     self.data_acq = threading.Semaphore(1)
 
-    # open a file
-    self.csv = None
-    self.data_path = data_path
-    self.new_file(timenow)
-
     return
+
+  def reset_daily_stats(self):
+    # initialize the daily statistics
+    self.daily_windrun = 0.0
+    self.max_gust = 0.0
+    self.peak_solar = 0.0
 
   def run(self):
     """A do nothing routine to use so the thread won't exit"""
@@ -232,6 +215,10 @@ class roof_station(object):
     # get our current time
     timenow = datetime.datetime.now(pytz.UTC)
 
+    # get the CPU temp
+    t_cpu_c = int(open('/sys/class/thermal/thermal_zone0/temp').read()) / 1e3
+    t_cpu_f = t_cpu_c * 9.0/5.0 + 32.0
+
     # do these items every time we pass (4 Hz tasks)
     # anemometer
     ws_mph, windrun = self.anemometer.get_readings()
@@ -243,7 +230,7 @@ class roof_station(object):
     self.pulse_count += 1
     
     # 3 second data
-    self.process_003sec.add_values(timenow, ws_mph, ws_dir, solar)
+    self.process_003sec.add_values(timenow, ws_mph, ws_dir, solar, t_cpu_f)
 
     # WMO peak gust comes from the maximum 3 second average wind in
     # the averaging interval.  Compute that here to add to the other
@@ -251,13 +238,17 @@ class roof_station(object):
     data_003 = self.process_003sec.process_data(timenow)
 
     # now save the data for the other intervals
-    self.process_120sec.add_values(timenow, ws_mph, ws_dir, solar, data_003.s_spd)
-    #self.process_600sec.add_values(timenow, ws_mph, ws_dir, solar, data_003.s_spd)
+    self.process_120sec.add_values(timenow, ws_mph, ws_dir, solar, t_cpu_f, data_003.speed)
     
+    # if the day changed, reset stats
+    if timenow.day != self.current_day:
+        self.reset_daily_stats()
+        self.current_day = timenow.day
+
     # maintain our daily stats
     self.daily_windrun += windrun
-    if data_003.s_spd > self.max_gust:
-      self.max_gust = data_003.s_spd
+    if data_003.speed > self.max_gust:
+      self.max_gust = data_003.speed
     if data_003.solar > self.peak_solar:
       self.peak_solar = data_003.solar
 
@@ -266,51 +257,36 @@ class roof_station(object):
       # reset our target
       self.next_001 = timenow + datetime.timedelta(0, 0, 0, 875)
 
-      # if our date changed, open a new file
-      if timenow.date() != self.last_date or self.need_new_files == True:
-        # close the current file and reopen a new one
-        self.new_file(timenow)
-      
-        # save this date for next time
-        self.last_date = timenow.date()
-
       # compute our wind statistics
       data_120 = self.process_120sec.process_data(timenow)
-      #data_600 = self.process_600sec.process_data(timenow)
 
       # print our data to the screen
-      timestamp = timenow.strftime("%Y-%m-%d %H:%M:%S.%f %Z")
+      timestamp = timenow.strftime("%Y-%m-%d %H:%M:%S")
       
+      # send our data to the shared memory
+      with self.data_array.get_lock():
+          self.data_array[0] = timenow.timestamp() # UNIX Timestamp
+          self.data_array[1] = data_003.direction 
+          self.data_array[2] = data_003.speed
+          self.data_array[2] = data_120.gust
+          self.data_array[4] = data_003.solar
+          self.data_array[5] = data_003.cpu_t
+
       # sample output
-      #     "2015-01-04 14:03:00:    Dir   Vspd   Sspd  SpStd    Gust      Ti Insolation
-      #     "                        deg    mph    mph    mph     mph      -- W/m^2
-      #     "         XXX Second: XXX.xx YYY.yy ZZZ.zz AAA.aa -BBB.ba CCC.ccc DDDD.d
-      #os.system('cls' if os.name == 'nt' else 'clear')
-      print("{:s}:    Dir   Vspd   Sspd  SpStd    Gust      Ti Insolation".format(timestamp))
-      print("                        deg    mph    mph    mph     mph      -- W/m^2")
-      print("           3 Second: {:06.2f} {:6.2f} {:6.2f} {:6.2f} {:7.2f} {:7.3f} {:6.1f}".format(data_003.m_dir,
-                                                                                                   data_003.v_spd,
-                                                                                                   data_003.s_spd,
-                                                                                                   data_003.ss_std,
-                                                                                                   data_003.gust,
-                                                                                                   data_003.ti,
-                                                                                                   data_003.solar))
-
-      print("           2 Minute: {:06.2f} {:6.2f} {:6.2f} {:6.2f} {:7.2f} {:7.3f} {:6.1f}".format(data_120.m_dir,
-                                                                                                   data_120.v_spd,
-                                                                                                   data_120.s_spd,
-                                                                                                   data_120.ss_std,
-                                                                                                   data_120.gust,
-                                                                                                   data_120.ti,
-                                                                                                   data_120.solar))
-
-      #print("          10 Minute: {:06.2f} {:6.2f} {:6.2f} {:6.2f} {:7.2f} {:7.3f} {:6.1f}".format(data_600.m_dir,
-      #                                                                                             data_600.v_spd,
-      #                                                                                             data_600.s_spd,
-      #                                                                                             data_600.ss_std,
-      #                                                                                             data_600.gust,
-      #                                                                                             data_600.ti,
-      #                                                                                             data_600.solar))
+      #     "2015-01-04 14:03:00:       Dir    Spd   Gust   Solar    CPU
+      #     "                           deg    mph    mph   W/m^2   degF
+      #     "                        123.56 123.56 123.56 1234.67 123.56
+      print("{:s}:       Dir    Spd   Gust   Solar    CPU".format(timestamp))
+      print("                           deg    mph    mph   W/m^2   degF")
+      print("                        {:6.2f} {:6.2f} ---.-- {:7.2f} {:6.2f}".format(data_003.direction,
+                                                                                     data_003.speed,
+                                                                                     data_003.solar,
+                                                                                     data_003.cpu_t))
+      print("                        {:6.2f} {:6.2f} {:6.2f} {:7.2f} {:6.2f}".format(data_120.direction,
+                                                                                     data_120.speed,
+                                                                                     data_120.gust,
+                                                                                     data_120.solar,
+                                                                                     data_120.cpu_t))
 
       print("           Daily: Wind Run:{:.1f} Peak Gust:{:.1f} MaxSolar:{:.1f}".format(self.daily_windrun, 
                                                                                         self.max_gust,
@@ -318,134 +294,44 @@ class roof_station(object):
       print("     Pulse Count:{:d}".format(self.pulse_count))
       self.pulse_count = 0
 
-      # get the CPU temp
-      t_cpu_c = int(open('/sys/class/thermal/thermal_zone0/temp').read()) / 1e3
-      t_cpu_f = t_cpu_c * 9.0/5.0 + 32.0
-      print("CPU Temp:{:.2f}".format(t_cpu_f))
-
-      # add the wind file
-      try:
-        with open("%s/currentwind.csv"%self.data_path, "w") as windfile:
-          windfile.write("%6.2f,%.2f,%.2f\n"%(data_003.m_dir, data_003.v_spd, data_003.gust))
-          self.need_new_file  = False
-
-        # add the data to the CSV file
-        self.csv.write("{:s},".format(timestamp))
-        self.csv.write("{:06.2f},{:.2f},{:.2f},{:.2f},{:.2f},{:.3f},{:.1f},".format(data_003.m_dir,
-                                                                                  data_003.v_spd,
-                                                                                  data_003.s_spd,
-                                                                                  data_003.ss_std,
-                                                                                  data_003.gust,
-                                                                                  data_003.ti,
-                                                                                  data_003.solar))
-        self.csv.write("{:06.2f},{:.2f},{:.2f},{:.2f},{:.2f},{:.3f},{:.1f}\n".format(data_120.m_dir,
-                                                                                  data_120.v_spd,
-                                                                                  data_120.s_spd,
-                                                                                  data_120.ss_std,
-                                                                                  data_120.gust,
-                                                                                  data_120.ti,
-                                                                                  data_120.solar))
-        #self.csv.write("{:06.2f},{:.2f},{:.2f},{:.2f},{:.2f},{:.3f},{:.1f}\n".format(data_600.m_dir,
-        #                                                                            data_600.v_spd,
-        #                                                                            data_600.s_spd,
-        #                                                                            data_600.ss_std,
-        #                                                                            data_600.gust,
-        #                                                                            data_600.ti,
-        #                                                                            data_600.solar))
-      except:
-          print("unable to write to windfile....will retry next time")
-          self.need_new_files = True
-
-
-
     self.data_acq.release()
 
     return
 
-  def new_file(self, timenow):
-    """Opens a new data archive CSV file and adds a header.  
-    Also closes old file if it exists.
-
-    timenow: datetime current time"""
-    # close the current file
-    if self.csv:
-      self.csv.close()
-
-    # build the filename of the new file
-    filename = self.data_path + timenow.strftime("/%Y%m%d_%H%M%S_roof.csv")
-
-    # open the new file
-    # only buffer 1 line
-    bufsize = 1
-    try: 
-      self.csv = open(filename, "w", bufsize)
-
-      # add the header
-      self.csv.write("Timestamps indicate end of averaging period\n")
-      self.csv.write("Software Version {:s}\n".format(VERSION))
-  
-      self.csv.write("Yesterday's Stats (only filled in when running past midnight)\n")
-      self.csv.write("Total Windrun (miles),Maximum Gust (mph),Peak Solar Insolation (W/m^2)\n")
-      self.csv.write("{:.1f},{:.1f},{:.1f}\n".format(self.daily_windrun, self.max_gust, self.peak_solar))
-  
-      self.csv.write("Time (UTC),")
-  
-      self.csv.write("Wind Direction [3 sec] (True),")
-      self.csv.write("Vector Wind Speed [3 sec] (mph),")
-      self.csv.write("Scalar Wind Speed [3 sec] (mph),")
-      self.csv.write("Wind Speed Standard Deviation [3 sec] (mph),")
-      self.csv.write("Gust [3 sec] (mph),")
-      self.csv.write("TI [3 sec],")
-      self.csv.write("Solar Insolation [3 sec] (W/m^2),")
-  
-      self.csv.write("Wind Direction [120 sec] (True),")
-      self.csv.write("Vector Wind Speed [120 sec] (mph),")
-      self.csv.write("Scalar Wind Speed [120 sec] (mph),")
-      self.csv.write("Wind Speed Standard Deviation [120 sec] (mph),")
-      self.csv.write("Gust [120 sec] (mph),")
-      self.csv.write("TI [120 sec],")
-      self.csv.write("Solar Insolation [120 sec] (W/m^2)\n")
-   
-      # if using this code, change the \n above to a ,
-      #self.csv.write("Wind Direction [600 sec] (True),")
-      #self.csv.write("Vector Wind Speed [600 sec] (mph),")
-      #self.csv.write("Scalar Wind Speed [600 sec] (mph),")
-      #self.csv.write("Wind Speed Standard Deviation [600 sec] (mph),")
-      #self.csv.write("Gust [600 sec] (mph),")
-      #self.csv.write("TI [600 sec],")
-      #self.csv.write("Solar Insolation [600 sec] (W/m^2)\n")
-      self.need_new_files = False
-    except:
-      print("Unable to open new file.  Will retry")
-      self.need_new_files = True
-  
-    # reset the daily statistics
-    self.daily_windrun = 0.0
-    self.max_gust = 0.0
-    self.peak_solar = 0.0
-
-    return
-
-
-def main():
-  print("Copyright (C) 2015 AeroSys Engineering, Inc.")
+if __name__ == '__main__':
+  print("Copyright (C) 2018 AeroSys Engineering, Inc.")
   print("This program comes with ABSOLUTELY NO WARRANTY;")
   print("This is free software, and you are welcome to redistribute it")
   print("under certain conditions.  See GNU Public License.")
   print("")
+  print("Version:", VERSION)
 
   print("Press Control-c to exit.")
 
   print("Waiting for clock to stabilize.")
   time.sleep(15)
 
+  # parse the config file
+  config = configparser.ConfigParser()
+
+  config.read('/home/pi/WeatherData/config.ini')
+
+  hostname = config['ROOF_STATION']['host']
+  port = int(config['ROOF_STATION']['port'])
+  authkey = config['ROOF_STATION']['authkey'].encode()
+
+  print(hostname, port, authkey)
+
+  # creata a shared array of floats
+  data_array = Array('d', 6)
+
+  dataserver = txrx.MPArrayServer(hostname, port, authkey, data_array)
+  dataserver.daemon = True
+  dataserver.start()
+
   # instance our station
-  roof = roof_station('/mnt/keith-pc/wx_data/roof_station')
+  roof = roof_station(data_array)
 
   # run until we are done
   roof.run()
-
-# only run main if this is called directly
-if __name__ == '__main__':
-  main()
 
