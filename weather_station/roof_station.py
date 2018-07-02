@@ -268,7 +268,7 @@ class roof_station():
           self.data_array[0] = timenow.timestamp() # UNIX Timestamp
           self.data_array[1] = data_003.direction 
           self.data_array[2] = data_003.speed
-          self.data_array[2] = data_120.gust
+          self.data_array[3] = data_120.gust
           self.data_array[4] = data_003.solar
           self.data_array[5] = data_003.cpu_t
 
