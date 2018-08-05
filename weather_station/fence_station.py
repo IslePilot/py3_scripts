@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/python3
 
 """
 Copyright 2018 (C) AeroSys Engineering, Inc.
@@ -98,7 +98,7 @@ def get_rain_total():
     print("Yearly Rain Total: Last Update:{:s} Total:{:s}".format(*rain_data))
     total_rain_in = float(rain_data[-1])
   except IOError as err:
-    print("Unable to open rain file: {:s}".format(err))
+    print("Unable to open rain file: {}".format(err))
 
     # if the file did not exist, build it
     if err.errno == 2:
