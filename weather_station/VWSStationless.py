@@ -33,7 +33,7 @@ from collections import namedtuple
 from multiprocessing import Array
 
 # define a version for this file
-VERSION = "1.0.20180522a"
+VERSION = "1.0.20180701a"
 
 class WxDataCollector():
   BAD_INT = 0
@@ -64,8 +64,12 @@ class WxDataCollector():
   FENCE_DATA = namedtuple("FENCE_DATA", fence_list)
   
   roof_list = ["timestamp"]
-  roof_list.append("timestamp")
-  
+  roof_list.append("wind_direction")
+  roof_list.append("wind_speed_mph")
+  roof_list.append("wind_gust_mph")
+  roof_list.append("solar_insolation")
+  roof_list.append("cpu_temp_f")
+  ROOF_DATA = namedtuple("ROOF_DATA", roof_list)
   
   def __init__(self, config_file):
     # parse the config file
@@ -75,6 +79,9 @@ class WxDataCollector():
     # read the SYSTEM configuration items
     self.path = self.config['SYSTEM']['wx_data_directory']
     self.timezone = pytz.timezone(self.config['SYSTEM']['timezone'])
+    
+    # initialize 
+    self.wind_speed_mph = None
     
     # ensure our output data path exists
     filetools.mkdir("{:s}/VWSInput".format(self.path))
@@ -87,6 +94,7 @@ class WxDataCollector():
     # instance the data collectors
     self.gather_metar_data(self.config['METAR'])
     self.gather_fencestation_data(self.config['FENCE_STATION'])
+    self.gather_roofstation_data(self.config['ROOF_STATION'])
     
     # build the data format
     self.data = OrderedDict() # native units
@@ -113,19 +121,35 @@ class WxDataCollector():
   
   def gather_fencestation_data(self, config):
     # read the config
-    hostname = config['fence_host']
-    port = int(config['fence_port'])
-    password = config['fence_authkey'].encode()
-    read_delay = float(config['fence_update_interval_sec'])
+    hostname = config['host']
+    port = int(config['port'])
+    password = config['authkey'].encode()
+    read_delay = float(config['update_interval_sec'])
     
     # initialize the fence station variables
     self.last_fence_data = []
-    self.fence_elevaion = float(config['fence_station_elevation_ft'])
     
     # create and run the fence station collector
     self.fencestation_collector = txrx.MPArrayReceiver(hostname, port, password, read_delay, self.fencestation_array)
     self.fencestation_collector.daemon = True  # run this process on its own until this process dies
     self.fencestation_collector.start()
+    
+    return
+  
+  def gather_roofstation_data(self, config):
+    # read the config
+    hostname = config['host']
+    port = int(config['port'])
+    password = config['authkey'].encode()
+    read_delay = float(config['update_interval_sec'])
+    
+    # initialize the fence station variables
+    self.last_roof_data = []
+    
+    # create and run the fence station collector
+    self.roofstation_collector = txrx.MPArrayReceiver(hostname, port, password, read_delay, self.roofstation_array)
+    self.roofstation_collector.daemon = True  # run this process on its own until this process dies
+    self.roofstation_collector.start()
     
     return
   
@@ -141,15 +165,15 @@ class WxDataCollector():
     self.data['second'] = [WxDataCollector.BAD_INT, "{:d},", "Second"]  # local clock
     
     # from anemometer and vane
-    self.data['wind_speed_mph'] = [WxDataCollector.BAD_FLOAT, "{:.2f},", "Wind Speed (mph)"]  # METAR for now
-    self.data['wind_gust_mph'] = [WxDataCollector.BAD_FLOAT, "{:.2f},", "Wind Gust (mph)"]  # METAR for now
-    self.data['wind_direction_deg'] = [WxDataCollector.BAD_FLOAT, "{:.2f},", "Wind Direction (true deg)"]  # METAR for now
+    self.data['wind_speed_mph'] = [WxDataCollector.BAD_FLOAT, "{:.2f},", "Wind Speed (mph)"]  # Roof Station
+    self.data['wind_gust_mph'] = [WxDataCollector.BAD_FLOAT, "{:.2f},", "Wind Gust (mph)"]  # Roof Station
+    self.data['wind_direction_deg'] = [WxDataCollector.BAD_FLOAT, "{:.2f},", "Wind Direction (true deg)"]  # Roof Station
     
     # from sensors
     self.data['inside_humidity_pct'] = [WxDataCollector.BAD_FLOAT, "{:.2f},", "Inside Humidity (%)"]
-    self.data['outside_humidity_pct'] = [WxDataCollector.BAD_FLOAT, "{:.2f},", "Outside Humidity (%)"]  # METAR for now
+    self.data['outside_humidity_pct'] = [WxDataCollector.BAD_FLOAT, "{:.2f},", "Outside Humidity (%)"]  # Fence Station
     self.data['inside_temp_degF'] = [WxDataCollector.BAD_FLOAT, "{:.2f},", "Inside Temperature (deg F)"]
-    self.data['outside_temp_degF'] = [WxDataCollector.BAD_FLOAT, "{:.2f},", "Outiside Temperature (deg F)"]  # METAR for now
+    self.data['outside_temp_degF'] = [WxDataCollector.BAD_FLOAT, "{:.2f},", "Outside Temperature (deg F)"]  # Fence Station
     self.data['barometer_in'] = [WxDataCollector.BAD_FLOAT, "{:.2f},", "Sea Level Pressure (in Hg)"]  # Fence Station
     
     # from rain gauge
@@ -163,9 +187,9 @@ class WxDataCollector():
     # from other various sources
     self.data['channel1_temp_degF'] = [WxDataCollector.BAD_FLOAT, "{:.2f},", "Ch1 Temperature (deg F)"] # METAR
     self.data['channel1_humidity_pct'] = [WxDataCollector.BAD_FLOAT, "{:.2f},", "Ch1 Humidity (%)"] # METAR
-    self.data['channel2_temp_degF'] = [WxDataCollector.BAD_FLOAT, "{:.2f},", "Ch2 Temperature (deg F)"]
+    self.data['channel2_temp_degF'] = [WxDataCollector.BAD_FLOAT, "{:.2f},", "Ch2 Temperature (deg F)"] # Roof Station CPU
     self.data['channel2_humidity_pct'] = [WxDataCollector.BAD_FLOAT, "{:.2f},", "Ch2 Humidity (%)"]
-    self.data['channel3_temp_degF'] = [WxDataCollector.BAD_FLOAT, "{:.2f},", "Ch3 Temperature (deg F)"]
+    self.data['channel3_temp_degF'] = [WxDataCollector.BAD_FLOAT, "{:.2f},", "Ch3 Temperature (deg F)"] # Fence Station CPU
     self.data['channel3_humidity_pct'] = [WxDataCollector.BAD_FLOAT, "{:.2f},", "Ch3 Humidity (%)"]
     
     # not used
@@ -173,22 +197,22 @@ class WxDataCollector():
     self.data['uv_index'] = [WxDataCollector.BAD_FLOAT, "{:.2f},", "UV Index"]
     
     # from pyranometer
-    self.data['solar_radiation'] = [WxDataCollector.BAD_FLOAT, "{:.2f},", "Solar Radiation (W/m**2)"]
+    self.data['solar_radiation'] = [WxDataCollector.BAD_FLOAT, "{:.2f},", "Solar Radiation (W/m**2)"] # Roof Station
     
     # computed
-    self.data['wind_chill_degF'] = [WxDataCollector.BAD_FLOAT, "{:.2f},", "Wind Chill (deg F)"]  # METAR for now
+    self.data['wind_chill_degF'] = [WxDataCollector.BAD_FLOAT, "{:.2f},", "Wind Chill (deg F)"]  # Fence Station and Roof Station
     self.data['indoor_heat_index_degF'] = [WxDataCollector.BAD_FLOAT, "{:.2f},", "Indoor Heat Index (deg F)"]
-    self.data['outdoor_heat_index_degF'] = [WxDataCollector.BAD_FLOAT, "{:.2f},", "Outdoor Heat Index (deg F)"]  # METAR for now
-    self.data['dew_point_degF'] = [WxDataCollector.BAD_FLOAT, "{:.2f},", "Dew Point (deg F)"]  # METAR for now
+    self.data['outdoor_heat_index_degF'] = [WxDataCollector.BAD_FLOAT, "{:.2f},", "Outdoor Heat Index (deg F)"]  # Fence Station
+    self.data['dew_point_degF'] = [WxDataCollector.BAD_FLOAT, "{:.2f},", "Dew Point (deg F)"]  # METAR for now # Fence Station
     
     # rates from data
     self.data['rain_rate_in_per_hour'] = [WxDataCollector.BAD_FLOAT, "{:.2f},", "Rain Rate (in/hr)"]  # Fence Station
     self.data['outdoor_temp_rate_degF_per_hour'] = [WxDataCollector.BAD_FLOAT, "{:.2f},", "Outdoor Temp Rate (deg F/hr)"] # Fence Station
     self.data['indoor_temp_rate_degF_per_hour'] = [WxDataCollector.BAD_FLOAT, "{:.2f},", "Indoor Temp Rate (deg F/hr)"]
-    self.data['barometer_rate_in_per_hour'] = [WxDataCollector.BAD_FLOAT, "{:.2f},", "Barometer Rate"]  # METAR for now
+    self.data['barometer_rate_in_per_hour'] = [WxDataCollector.BAD_FLOAT, "{:.2f},", "Barometer Rate"]  # Fence Station
     self.data['channel1_temp_rate_degF_per_hour'] = [WxDataCollector.BAD_FLOAT, "{:.2f},", "Ch1 Temp Rate (deg F/hr)"]  # METAR
-    self.data['channel2_temp_rate_degF_per_hour'] = [WxDataCollector.BAD_FLOAT, "{:.2f},", "Ch2 Temp Rate (deg F/hr)"]
-    self.data['channel3_temp_rate_degF_per_hour'] = [WxDataCollector.BAD_FLOAT, "{:.2f},", "Ch3 Temp Rate (deg F/hr)"]
+    self.data['channel2_temp_rate_degF_per_hour'] = [WxDataCollector.BAD_FLOAT, "{:.2f},", "Ch2 Temp Rate (deg F/hr)"] # Roof Station
+    self.data['channel3_temp_rate_degF_per_hour'] = [WxDataCollector.BAD_FLOAT, "{:.2f},", "Ch3 Temp Rate (deg F/hr)"] # Fence Station
     
     # from rain gauge
     self.data['monthly_rain_in'] = [WxDataCollector.BAD_FLOAT, "{:.2f},", "Monthly Rain (in)"]
@@ -209,6 +233,9 @@ class WxDataCollector():
       
       # get the latest fence station data
       self._get_fence_station()
+      
+      # get the lastest roof station data
+      self._get_roof_station()
             
       # publish the data to our data file
       self.write_data_files()
@@ -288,9 +315,11 @@ class WxDataCollector():
     
     # get some things in better units
     temp_f = wx.temp_c_to_f(metar_data.temp_c)
-    dewpoint_f = wx.temp_c_to_f(metar_data.dewpoint_c)
-    wind_speed_mph = wx.speed_kt_to_mph(metar_data.wind_speed_kt)
-    gust_speed_mph = wx.speed_kt_to_mph(metar_data.wind_gust_kt)
+    #===========================================================================
+    # dewpoint_f = wx.temp_c_to_f(metar_data.dewpoint_c)
+    # wind_speed_mph = wx.speed_kt_to_mph(metar_data.wind_speed_kt)
+    # gust_speed_mph = wx.speed_kt_to_mph(metar_data.wind_gust_kt)
+    #===========================================================================
     
     # values we always want to get from the METAR data
     self.data['channel1_temp_degF'][0] = temp_f
@@ -305,28 +334,29 @@ class WxDataCollector():
       self.data['channel1_temp_rate_degF_per_hour'][0] = 0.0
     
     # these values will be replaced with our sensors when available
-    self.data['wind_speed_mph'][0] = wind_speed_mph
-    self.data['wind_gust_mph'][0] = gust_speed_mph
-    self.data['wind_direction_deg'][0] = metar_data.wind_dir_deg
+    # self.data['wind_speed_mph'][0] = wind_speed_mph
+    # self.data['wind_gust_mph'][0] = gust_speed_mph
+    # self.data['wind_direction_deg'][0] = metar_data.wind_dir_deg
     
-    self.data['outdoor_heat_index_degF'][0] = wx.compute_heat_index(temp_f, metar_data.rh_pct)
-    self.data['dew_point_degF'][0] = dewpoint_f
+    # self.data['outdoor_heat_index_degF'][0] = wx.compute_heat_index(temp_f, metar_data.rh_pct)
+    # self.data['dew_point_degF'][0] = dewpoint_f
     
-    self.data['outside_temp_degF'][0] = temp_f
-    self.data['outside_humidity_pct'][0] = metar_data.rh_pct
+    # self.data['outside_temp_degF'][0] = temp_f
+    # self.data['outside_humidity_pct'][0] = metar_data.rh_pct
     
-    self.data['wind_chill_degF'][0] = wx.compute_wind_chill(temp_f, wind_speed_mph)
+    # self.data['wind_chill_degF'][0] = wx.compute_wind_chill(temp_f, wind_speed_mph)
     
     # for now, compute the baro rate from the METAR data...it will be hard from our data because
     # the update rate is high
-    if self.last_metar != None and round(self.last_metar.timestamp) != 0:
-      d_press = metar_data.altim_in_hg - self.last_metar.altim_in_hg
-      d_time_sec = metar_data.timestamp - self.last_metar.timestamp
-      d_time_hr = d_time_sec/3600.0
-      self.data['barometer_rate_in_per_hour'][0] = d_press/d_time_hr
-    else:
-      self.data['barometer_rate_in_per_hour'][0] = 0.0
-      
+    #===========================================================================
+    # if self.last_metar != None and round(self.last_metar.timestamp) != 0:
+    #   d_press = metar_data.altim_in_hg - self.last_metar.altim_in_hg
+    #   d_time_sec = metar_data.timestamp - self.last_metar.timestamp
+    #   d_time_hr = d_time_sec/3600.0
+    #   self.data['barometer_rate_in_per_hour'][0] = d_press/d_time_hr
+    # else:
+    #   self.data['barometer_rate_in_per_hour'][0] = 0.0
+    #===========================================================================
     
     # save the data we need for the next update
     self.last_metar = metar_data
@@ -350,26 +380,30 @@ class WxDataCollector():
       return
     
     # now update our values
-    #self.data['outside_temp_degF'][0] = fence_data.temp_f
-    #self.data['outside_humidity_pct'][0] = fence_data.rh_pct
-    #self.data['outdoor_heat_index_degF'][0] = wx.compute_heat_index(fence_data.temp_f, fence_data.rh_pct)
+    self.data['outside_temp_degF'][0] = fence_data.temp_f
+    self.data['outside_humidity_pct'][0] = fence_data.rh_pct
+    self.data['outdoor_heat_index_degF'][0] = wx.compute_heat_index(fence_data.temp_f, fence_data.rh_pct)
     
     self.data['barometer_in'][0] = fence_data.press_inhg
     
-    #temp_c = wx.temp_f_to_c(fence_data.temp_f)
-    #dewpoint_c = wx.calc_dewpoint_c(temp_c, fence_data.rh_pct)
-    #self.data['dew_point_degF'][0] = wx.temp_c_to_f(dewpoint_c)
+    temp_c = wx.temp_f_to_c(fence_data.temp_f)
+    dewpoint_c = wx.calc_dewpoint_c(temp_c, fence_data.rh_pct)
+    self.data['dew_point_degF'][0] = wx.temp_c_to_f(dewpoint_c)
+    
+    self.data['channel3_temp_degF'][0] = fence_data.cpu_temp_f
+    
+    # compute the wind chill if we can
+    if self.wind_speed_mph != None:
+      self.data['wind_chill_degF'][0] = wx.compute_wind_chill(fence_data.temp_f, self.wind_speed_mph)
     
     datatime = datetime.datetime.fromtimestamp(fence_data.timestamp, tz=pytz.UTC)
-    #===========================================================================
-    # print("==========================================================================")
-    # print("Fence Station: {:s}".format(datatime.strftime("%Y-%m-%d %H:%M:%S.%f %Z")))
-    # print("Fence Station: Temperature (F):{:.2f} Humidity:{:.1f}".format(fence_data.temp_f, fence_data.rh_pct))
-    # print("Fence Station: Pressure (inHg):{:.2f} Sea-Level Pressure:{:.2f}".format(fence_data.press_inhg, fence_data.slp_inhg))
-    # print("Fence Station: Pressure Altitude:{:.1f} Density Altitude:{:.1f}".format(fence_data.pa_ft, fence_data.da_ft))
-    # print("Fence Station: New Rain:{:.2f} Total Rain:{:.2f}".format(fence_data.int_rain_in, fence_data.total_rain_in))
-    # print("Fence Station: CPU Temp:{:.2f} Sensor Temp:{:.2f}".format(fence_data.cpu_temp_f, fence_data.sensor_temp_f))
-    #===========================================================================
+    print("==========================================================================")
+    print("Fence Station: {:s}".format(datatime.strftime("%Y-%m-%d %H:%M:%S.%f %Z")))
+    print("Fence Station: Temperature (F):{:.2f} Humidity:{:.1f}".format(fence_data.temp_f, fence_data.rh_pct))
+    print("Fence Station: Pressure (inHg):{:.2f} Sea-Level Pressure:{:.2f}".format(fence_data.press_inhg, fence_data.slp_inhg))
+    print("Fence Station: Pressure Altitude:{:.1f} Density Altitude:{:.1f}".format(fence_data.pa_ft, fence_data.da_ft))
+    print("Fence Station: New Rain:{:.2f} Total Rain:{:.2f}".format(fence_data.int_rain_in, fence_data.total_rain_in))
+    print("Fence Station: CPU Temp:{:.2f} Sensor Temp:{:.2f}".format(fence_data.cpu_temp_f, fence_data.sensor_temp_f))
     
     # save this for next time
     self.last_fence_data.append(fence_data)
@@ -379,7 +413,6 @@ class WxDataCollector():
     
     # compute the length of our history
     history_sec = self.last_fence_data[-1].timestamp - self.last_fence_data[0].timestamp
-    
     
     # only proceed if we have ~1 minutes or more of data
     if history_sec < 60.0:
@@ -398,9 +431,7 @@ class WxDataCollector():
     # get the temperature change rate
     temp900 = sec900[-1].temp_f - sec900[0].temp_f
     self.data['outdoor_temp_rate_degF_per_hour'][0] = temp900 * 4
-    #===========================================================================
-    # print("Fence Station: Outdoor Temperature Rate (degF/hr):{:.2f}".format(temp900*4))
-    #===========================================================================
+    print("Fence Station: Outdoor Temperature Rate (degF/hr):{:.2f}".format(temp900*4))
     
     # find the amount of rain in each time period
     rain060 = sec060[-1].total_rain_in - sec060[0].total_rain_in
@@ -424,20 +455,57 @@ class WxDataCollector():
       rate = rain_hr * multiplier
     # set our hourly rain rate
     self.data['rain_rate_in_per_hour'][0] = rate
-    #===========================================================================
-    # print("Fence Station: Rain Rate (in/hr):{:.2f}".format(rate))
-    #===========================================================================
+    print("Fence Station: Rain Rate (in/hr):{:.2f}".format(rate))
     
     # set the amount of hourly rain
     self.data['hourly_rain_in'][0] = rain_hr
-    #===========================================================================
-    # print("Fence Station: Rain in the last hour:{:.2f}".format(rain_hr))
-    #===========================================================================
+    print("Fence Station: Rain in the last hour:{:.2f}".format(rain_hr))
     
     self.data['total_rain_in'][0] = self.last_fence_data[-1].total_rain_in # -self.last_fence_data[-2].total_rain_in # works
     self.data['daily_rain_in'][0] = self.last_fence_data[-1].total_rain_in
     self.data['monthly_rain_in'][0] = self.last_fence_data[-1].total_rain_in
     self.data['yearly_rain_in'][0] = self.last_fence_data[-1].total_rain_in
+    
+    self.data['barometer_rate_in_per_hour'][0] = (sec900[-1].slp_inhg - sec900[0].slp_inhg)*4.0
+    
+    return
+  
+  def _get_roof_station(self):
+    # get the latest fencestation data
+    with self.roofstation_array.get_lock():
+      temp = self.roofstation_array[:]
+    
+    # build the named tuple
+    roof_data = self.ROOF_DATA(*temp)
+    
+    # only proceed if we have real data
+    if round(roof_data.timestamp) == 0:
+      return
+    
+    # if the timestamp didn't change, nothing changed, so we are done
+    if len(self.last_roof_data) != 0 and roof_data.timestamp == self.last_roof_data[-1].timestamp:
+      return
+    
+    # now update our values
+    self.data['wind_direction_deg'][0] = roof_data.wind_direction
+    self.data['wind_speed_mph'][0] = roof_data.wind_speed_mph
+    self.data['wind_gust_mph'][0] = roof_data.wind_gust_mph
+    self.data['solar_radiation'][0] = roof_data.solar_insolation
+    self.data['channel2_temp_degF'][0] = roof_data.cpu_temp_f
+    
+    # save this for wind chill computations
+    self.wind_speed_mph = roof_data.wind_speed_mph
+    
+    datatime = datetime.datetime.fromtimestamp(roof_data.timestamp, tz=pytz.UTC)
+    print("==========================================================================")
+    print("Roof Station: {:s}".format(datatime.strftime("%Y-%m-%d %H:%M:%S.%f %Z")))
+    print("Roof Station: Direction:{:.2f} Speed:{:.2f} Gust:{:.2f}".format(roof_data.wind_direction, roof_data.wind_speed_mph, roof_data.wind_gust_mph))
+    print("Roof Station: Solar Radiation:{:.2f}".format(roof_data.solar_insolation))
+    print("Roof Station: CPU Temp:{:.2f}".format(roof_data.cpu_temp_f))
+    
+    # save this for next time
+    self.last_roof_data.append(roof_data)
+    
     return
   
   @staticmethod
