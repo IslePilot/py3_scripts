@@ -91,7 +91,10 @@ def get_rain_total():
 
     # we need the last line with actual data
     lines = contents.split('\n')
+    for  l in lines:
+        print(l, len(l))
     line = [l for l in lines if len(l) >= 20][-1]
+    print(line)
 
     # parse the line to get the rain
     rain_data = line.split(',')
