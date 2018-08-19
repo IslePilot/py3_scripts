@@ -103,7 +103,7 @@ def get_rain_total():
     
     # find out when the last data was added
     # if we call this between UTC midnight and local midnight we will be off for the day potentially
-    last_time = datetime.datetime.strptime('%Y-%m-%d %H:%M:%S.%f')
+    last_time = datetime.datetime.strptime(rain_data[0], %Y-%m-%d %H:%M:%S.%f')
     if timenow.year == last_time.year and \
        timenow.month == last_time.month and \
        timenow.day == last_time.day:
@@ -189,7 +189,10 @@ if __name__ == '__main__':
   am2315 = am.AM2315()
   bmp180 = bmp.BMP180(sensor_elevation_ft = 5094.0)
   rain111 = rain.Rainwise111()
-  total_rain_in, current_year = get_rain_total()
+  total_rain_in, current_year, daily_rain_in = get_rain_total()
+  if daily_rain_in > 0:
+    rain_today = daily_rain_in
+  
 
   # the first two readings of the AM2315 might be junk, read and skip
   t_f, t_c, rh = am2315.get_readings()
