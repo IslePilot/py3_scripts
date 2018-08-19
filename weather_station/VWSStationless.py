@@ -174,7 +174,7 @@ class WxDataCollector():
     self.data['outside_humidity_pct'] = [WxDataCollector.BAD_FLOAT, "{:.2f},", "Outside Humidity (%)"]  # Fence Station
     self.data['inside_temp_degF'] = [WxDataCollector.BAD_FLOAT, "{:.2f},", "Inside Temperature (deg F)"]
     self.data['outside_temp_degF'] = [WxDataCollector.BAD_FLOAT, "{:.2f},", "Outside Temperature (deg F)"]  # Fence Station
-    self.data['barometer_in'] = [WxDataCollector.BAD_FLOAT, "{:.2f},", "Sea Level Pressure (in Hg)"]  # Fence Station
+    self.data['barometer_in'] = [29.92, "{:.2f},", "Sea Level Pressure (in Hg)"]  # Fence Station
     
     # from rain gauge
     self.data['total_rain_in'] = [WxDataCollector.BAD_FLOAT, "{:.2f},", "Total Rain (in)"]

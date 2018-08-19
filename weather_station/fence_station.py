@@ -102,7 +102,7 @@ def get_rain_total():
     print("Yearly Rain Total: Last Update:{:s} Total:{:s}, Daily Rain:{:s}".format(*rain_data))
     
     # find out when the last data was added
-    last_time = datetime.datetime.strptime(rain_data[0], %Y-%m-%d %H:%M:%S.%f')
+    last_time = datetime.datetime.strptime(rain_data[0], '%Y-%m-%d %H:%M:%S.%f')
     if timenow.year == last_time.year and \
        timenow.month == last_time.month and \
        timenow.day == last_time.day:
