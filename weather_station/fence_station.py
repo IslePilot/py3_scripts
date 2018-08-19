@@ -263,7 +263,7 @@ if __name__ == '__main__':
     print("Temperature(F):{:.2f} Humidity(%):{:.1f} ".format(t2315_f, rh2315))
     print("Pressure(inHg):{:.2f} Sea-Level Pressure(inHg):{:.2f}".format(p180_inhg, slp180_inhg))
     print("Pressure Altitude:{:.1f} Density Altitude:{:.1f}".format(pa180_ft, da_ft))
-    print("New Rain:{:.2f} Total Rain:{:.2f}".format(interval_rain_in, total_rain_in))
+    print("New Rain:{:.2f} Daily Rain:{:.2f} Total Rain:{:.2f}".format(interval_rain_in, rain_today, total_rain_in))
     print("CPU Temp:{:.2f} Board Temp:{:.2f}".format(t_cpu_f, t180_f))
 
     time.sleep(5)
