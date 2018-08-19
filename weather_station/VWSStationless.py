@@ -60,6 +60,8 @@ class WxDataCollector():
   fence_list.append("da_ft")
   fence_list.append("int_rain_in")
   fence_list.append("total_rain_in")
+  fence_list.append("daily_rain_in")
+  fence_list.append("monthly_rain_in")
   fence_list.append("cpu_temp_f")
   FENCE_DATA = namedtuple("FENCE_DATA", fence_list)
   
@@ -462,8 +464,8 @@ class WxDataCollector():
     print("Fence Station: Rain in the last hour:{:.2f}".format(rain_hr))
     
     self.data['total_rain_in'][0] = self.last_fence_data[-1].total_rain_in # -self.last_fence_data[-2].total_rain_in # works
-    self.data['daily_rain_in'][0] = self.last_fence_data[-1].total_rain_in
-    self.data['monthly_rain_in'][0] = self.last_fence_data[-1].total_rain_in
+    self.data['daily_rain_in'][0] = self.last_fence_data[-1].daily_rain_in
+    self.data['monthly_rain_in'][0] = self.last_fence_data[-1].monthly_rain_in
     self.data['yearly_rain_in'][0] = self.last_fence_data[-1].total_rain_in
     
     self.data['barometer_rate_in_per_hour'][0] = (sec900[-1].slp_inhg - sec900[0].slp_inhg)*4.0
