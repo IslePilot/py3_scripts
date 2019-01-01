@@ -404,7 +404,10 @@ class WxDataCollector():
     print("Fence Station: Temperature (F):{:.2f} Humidity:{:.1f}".format(fence_data.temp_f, fence_data.rh_pct))
     print("Fence Station: Pressure (inHg):{:.2f} Sea-Level Pressure:{:.2f}".format(fence_data.press_inhg, fence_data.slp_inhg))
     print("Fence Station: Pressure Altitude:{:.1f} Density Altitude:{:.1f}".format(fence_data.pa_ft, fence_data.da_ft))
-    print("Fence Station: New Rain:{:.2f} Total Rain:{:.2f}".format(fence_data.int_rain_in, fence_data.total_rain_in))
+    print("Fence Station: New Rain:{:.2f} Total Rain:{:.2f} Monthly Rain:{:.2f} Daily Rain:{:.2f}".format(fence_data.int_rain_in, 
+                                                                                                          fence_data.total_rain_in,
+                                                                                                          fence_data.monthly_rain_in,
+                                                                                                          fence_data.daily_rain_in))
     print("Fence Station: CPU Temp:{:.2f} Sensor Temp:{:.2f}".format(fence_data.cpu_temp_f, fence_data.sensor_temp_f))
     
     # save this for next time
