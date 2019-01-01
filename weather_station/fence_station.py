@@ -61,6 +61,7 @@ def new_rain_file(new_rain):
   """build a new rain file"""
   # buld our filename
   timenow = datetime.datetime.now()
+  # this is a local time!
   current_year = timenow.year
   rain_file = "/home/pi/WeatherData/{:d}_RainTotal.txt".format(current_year)
 
@@ -81,7 +82,7 @@ def get_rain_total():
   # get our annual total rain
   # buld our filename
   timenow = datetime.datetime.now()
-  
+  # this is a local time
   current_year = timenow.year
   rain_file = "/home/pi/WeatherData/{:d}_RainTotal.txt".format(timenow.year)
   total_rain_in = 0.0
@@ -249,10 +250,10 @@ if __name__ == '__main__':
     t_cpu_f = t_cpu_c * 9.0/5.0 + 32.0
     
     # we need to watch the year for our rain data
-    if current_year != timenow.year:
+    if current_year != local_timenow.year:
       # open a new rain file
       new_rain_file(interval_rain_in)
-      current_year = timenow.year
+      current_year = local_timenow.year
     else:
       # if we got some rain, add it to the file
       if interval_rain_in > 0.0:
