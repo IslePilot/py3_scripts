@@ -204,6 +204,7 @@ if __name__ == '__main__':
     rain_today = daily_rain_in
   if monthly_rain_in > 0:
     monthly_rain = monthly_rain_in
+  annual_rain = total_rain_in
 
   # the first two readings of the AM2315 might be junk, read and skip
   t_f, t_c, rh = am2315.get_readings()
@@ -227,6 +228,10 @@ if __name__ == '__main__':
       if today.month != local_timenow.month:
         monthly_rain = 0.0
       
+      # if the year changed, we need to reset the annual total
+      if today.year != local_timenow.year:
+        annual_rain = 0.0
+      
       today = local_timenow
     
     # read the data
@@ -238,7 +243,7 @@ if __name__ == '__main__':
 
     # Read the Rain Gauge
     interval_rain_in = rain111.get_readings()
-    total_rain_in += interval_rain_in
+    annual_rain += interval_rain_in
     rain_today += interval_rain_in
     monthly_rain += interval_rain_in
 
@@ -254,10 +259,13 @@ if __name__ == '__main__':
       # open a new rain file
       new_rain_file(interval_rain_in)
       current_year = local_timenow.year
+      annual_rain = interval_rain_in
+      rain_today = interval_rain_in
+      monthly_rain = interval_rain_in
     else:
       # if we got some rain, add it to the file
       if interval_rain_in > 0.0:
-        save_new_rain_total(total_rain_in, interval_rain_in, rain_today, monthly_rain)
+        save_new_rain_total(annual_rain, interval_rain_in, rain_today, monthly_rain)
 
     # update our array
     with data.get_lock():
@@ -270,7 +278,7 @@ if __name__ == '__main__':
         data[6] = pa180_ft              # Pressure Altitdue (ft)
         data[7] = da_ft                 # Density Altitude (ft)
         data[8] = interval_rain_in      # Rain in the last read interval (in)
-        data[9] = total_rain_in         # total rain since system start (in)
+        data[9] = annual_rain           # total rain this year (in)
         data[10] = rain_today           # today's rain (in)
         data[11] = monthly_rain         # monthly rain (in)
         data[12]= t_cpu_f               # CPU Temp (deg F)
