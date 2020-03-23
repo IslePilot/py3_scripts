@@ -32,6 +32,7 @@ if __name__ == '__main__':
   
   while True:
     # wait for changes to be detected in the directory
+    print("Waiting for new files...")
     filetools.wait_for_change(raw_dir)
     
     # wait for the files to complete
@@ -48,11 +49,7 @@ if __name__ == '__main__':
                     "-P", "4830",
                     "C:\Temp\Wx_Raw\*.jpg", 
                     "keithbarr@droplet1.colorado-barrs.com:/home/keithbarr/public_html/wx"])
-    
-    # delete each file
-    for file in listing:
-      # now delete the file because we are done with it
-      filetools.rm(file)
+
 
   
   
