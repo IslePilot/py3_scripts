@@ -2,7 +2,7 @@
 
 """
 ************************************************************************************
-Copyright 2018 (C) AeroSys Engineering, Inc.
+Copyright 2020 (C) AeroSys Engineering, Inc.
 
 This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -26,9 +26,10 @@ Revision History:
 
 import sys
 sys.path.append("..")
+import __common.filetools as filetools
 
 # define a version for this file
-VERSION = "1.0.20180520a"
+VERSION = "1.0.20200418a"
 
 if __name__ == '__main__':
   # when this file is run directly, run this code
