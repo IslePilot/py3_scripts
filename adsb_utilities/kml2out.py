@@ -69,7 +69,7 @@ if __name__ == '__main__':
   
   # write the header
   output_file.write("{Airspace}\n")
-  output_file.write("$TYPE=6\n")
+  output_file.write("$TYPE=4\n")
   
   with open("C:\\Data\\DEN\\CO_Airspace.kml", "r") as f:
     while True:
@@ -92,6 +92,34 @@ if __name__ == '__main__':
         output_file.write("-1\n")
         
  
+  # ##################### Special ############################
+  # open the output file
+  output_file = open("C:\\Data\\DEN\\Special.out", "w")
+  
+  # write the header
+  output_file.write("{Airspace}\n")
+  output_file.write("$TYPE=1\n")
+  
+  with open("C:\\Data\\DEN\\Special.kml", "r") as f:
+    while True:
+      line = f.readline()
+      
+      # EOF?
+      if not line:
+        break
+      
+      # clean up the line
+      cline = line.strip()
+      if cline == "<coordinates>":
+        # get the next line and print it
+        coords = f.readline().strip().split(' ')
+        
+        # put each coordinate into the file
+        for point in coords:
+          pos = point.split(',')
+          output_file.write("{:.6f}+{:.6f}\n".format(float(pos[1]), float(pos[0])))
+        output_file.write("-1\n")
+        
   
   output_file.close()
 
