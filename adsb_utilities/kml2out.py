@@ -21,107 +21,95 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>
 
 Revision History:
 
-2018-05-20, ksb, created
+2020-04-18, ksb, created
+2020-04-20, ksb, added method to simplify multiple file processing
 """
 
 import sys
 sys.path.append("..")
 import __common.filetools as filetools
 
+def build_out(path, filename, color):
+  # open the output file
+  output_file = open(path + "\\" + filename + ".out", "w")
+  
+  # write the header
+  output_file.write("{{{}}}\n".format(filename))
+  output_file.write("$TYPE={}\n".format(color))
+  
+  with open(path + "\\" + filename + ".kml", "r") as f:
+    while True:
+      line = f.readline().strip('\t\n\r ')
+      
+      # EOF?
+      if not line:
+        break
+      
+      # does this get us into a coordinate block?
+      if "<coordinates>" in line:
+        # remove the starter
+        proc_line = line.replace("<coordinates>", "")
+        
+        # process the line
+        process = True
+        while process:
+          # identify if this is the end
+          if "</coordinates>" in proc_line:
+            # remove the closer
+            proc_line = proc_line.replace("</coordinates>", "")
+            process = False # we are done after we process this line
+            
+          coords = proc_line.split(' ')
+          
+          # put each coordinate into the file
+          for point in coords:
+            pos = point.split(',')
+            if len(pos) == 3:
+              output_file.write("{:.6f}+{:.6f}\n".format(float(pos[1]), float(pos[0])))
+          
+          # do we get another line of data or end this block?
+          if process:
+            proc_line = f.readline().strip()
+          else:
+            output_file.write("-1\n")
+  
+  output_file.close()
+  
+  return
+  
 # define a version for this file
-VERSION = "1.0.20200418a"
+VERSION = "1.0.20200420a"
 
 if __name__ == '__main__':
   # when this file is run directly, run this code
   print(VERSION)
   
-  # ##################### AIRPORTS ############################
-  # open the output file
-  output_file = open("C:\\Data\\DEN\\CO_Airports.out", "w")
+  path = "C:\\Data\\DEN"
   
-  # write the header
-  output_file.write("{Airports}\n")
-  output_file.write("$TYPE=2\n")
+  # colors:
+  # 1 - Orange
+  # 2 - Yellow
+  # 3 - Green
+  # 4 - Aqua
+  # 5 - Blue
+  # 6 - Magenta
+  # 7 - White
+  # 8 - Gray
+  build_out(path, "CO_Airports", 2)
+  build_out(path, "CO_Airspace", 6)
+  build_out(path, "CO_Interstates", 4)
+  build_out(path, "KDEN_Approaches", 1)
+  build_out(path, "KDEN_SIDs", 8)
+  build_out(path, "KDEN_STARS", 5)
+  build_out(path, "Special", 2)
   
-  with open("C:\\Data\\DEN\\CO_Airports.kml", "r") as f:
-    while True:
-      line = f.readline()
-      
-      # EOF?
-      if not line:
-        break
-      
-      # clean up the line
-      cline = line.strip()
-      if cline == "<coordinates>":
-        # get the next line and print it
-        coords = f.readline().strip().split(' ')
-        
-        # put each coordinate into the file
-        for point in coords:
-          pos = point.split(',')
-          output_file.write("{:.6f}+{:.6f}\n".format(float(pos[1]), float(pos[0])))
-        output_file.write("-1\n")
-        
-  # ##################### AIRSPACE ############################
-  # open the output file
-  output_file = open("C:\\Data\\DEN\\CO_Airspace.out", "w")
+  path = "C:\\Data\\BJC"
+  build_out(path, "KBJC_Approaches", 1)
+  build_out(path, "KBJC_SIDs", 8)
+  build_out(path, "KBJC_STARS", 5)
   
-  # write the header
-  output_file.write("{Airspace}\n")
-  output_file.write("$TYPE=4\n")
-  
-  with open("C:\\Data\\DEN\\CO_Airspace.kml", "r") as f:
-    while True:
-      line = f.readline()
-      
-      # EOF?
-      if not line:
-        break
-      
-      # clean up the line
-      cline = line.strip()
-      if cline == "<coordinates>":
-        # get the next line and print it
-        coords = f.readline().strip().split(' ')
-        
-        # put each coordinate into the file
-        for point in coords:
-          pos = point.split(',')
-          output_file.write("{:.6f}+{:.6f}\n".format(float(pos[1]), float(pos[0])))
-        output_file.write("-1\n")
-        
- 
-  # ##################### Special ############################
-  # open the output file
-  output_file = open("C:\\Data\\DEN\\Special.out", "w")
-  
-  # write the header
-  output_file.write("{Airspace}\n")
-  output_file.write("$TYPE=1\n")
-  
-  with open("C:\\Data\\DEN\\Special.kml", "r") as f:
-    while True:
-      line = f.readline()
-      
-      # EOF?
-      if not line:
-        break
-      
-      # clean up the line
-      cline = line.strip()
-      if cline == "<coordinates>":
-        # get the next line and print it
-        coords = f.readline().strip().split(' ')
-        
-        # put each coordinate into the file
-        for point in coords:
-          pos = point.split(',')
-          output_file.write("{:.6f}+{:.6f}\n".format(float(pos[1]), float(pos[0])))
-        output_file.write("-1\n")
-        
-  
-  output_file.close()
+  print("Done")
+
 
   
   
