@@ -87,6 +87,7 @@ if __name__ == '__main__':
   path = "C:\\Data\\DEN"
   
   # colors:
+  # 0 - Red
   # 1 - Orange
   # 2 - Yellow
   # 3 - Green
@@ -102,6 +103,7 @@ if __name__ == '__main__':
   build_out(path, "KDEN_SIDs", 8)
   build_out(path, "KDEN_STARS", 5)
   build_out(path, "Special", 2)
+  build_out(path, "Denver_Approaches", 0)
   
   path = "C:\\Data\\BJC"
   build_out(path, "KBJC_Approaches", 1)
