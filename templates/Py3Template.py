@@ -2,7 +2,7 @@
 
 """
 ************************************************************************************
-Copyright 2020 (C) AeroSys Engineering, Inc.
+Copyright ${year} (C) AeroSys Engineering, Inc.
 
 This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -21,7 +21,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>
 
 Revision History:
 
-2018-05-20, ksb, created
+  ${date}, ksb, created
 """
 
 import sys
@@ -29,7 +29,7 @@ sys.path.append("..")
 import __common.filetools as filetools
 
 # define a version for this file
-VERSION = "1.0.20200418a"
+VERSION = "1.0"
 
 if __name__ == '__main__':
   # when this file is run directly, run this code
