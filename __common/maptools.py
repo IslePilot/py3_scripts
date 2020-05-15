@@ -30,6 +30,36 @@ sys.path.append("..")
 import utm
 import math
 
+def circle(origin, radius_nm):
+  """build a list of lat/lon coordinates defining points along a circle
+  
+  origin: tuple defining the center of the circle (lat, lon) in decimal degrees, +N, +E
+  radius_nm: circle radius in nautical miles
+  
+  returns: list of waypoints(lat, lon) defining the arc (eg: [[lat1, lon1], [lat2, lon2]...]
+  """
+  # convert our center point to UTM
+  center = utm.from_latlon(*origin)
+  if origin[0] >= 0.0:
+    northern_hemisphere = True
+  else:
+    northern_hemisphere = False
+  
+  # convert radius to meters
+  radius = 1852.0 * radius_nm
+  
+  # figure out how many steps we need to take
+  steps = 120
+  stepsize = 3.0
+  
+  arclist = []
+  for i in range(steps+1):
+    theta = math.radians(float(i*stepsize))
+    point = [radius*math.sin(theta)+center[0], radius*math.cos(theta)+center[1]]
+    arclist.append(utm.to_latlon(point[0], point[1], center[2], northern=northern_hemisphere))
+
+  return arclist
+  
 def arcpoints(waypoint1, waypoint2, radius_nm, heading1_deg_mag, heading2_deg_mag, turn_direction, variation):
   """build a list of lat/lon coordinates defining points along an arc
   
@@ -41,7 +71,8 @@ def arcpoints(waypoint1, waypoint2, radius_nm, heading1_deg_mag, heading2_deg_ma
   turn_direction: "R"ight, "L"eft
   variation: Degrees of variation (positive west)
   
-  returns: list of waypoints(lat, lon) defining the arc (eg [[lat1, lon1], [lat2, lon2]...]"""
+  returns: list of waypoints(lat, lon) defining the arc (eg [[lat1, lon1], [lat2, lon2]...]
+  """
   
   # convert our waypoints to UTM
   wp1 = utm.from_latlon(*waypoint1)
