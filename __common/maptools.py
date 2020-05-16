@@ -60,6 +60,63 @@ def circle(origin, radius_nm):
 
   return arclist
   
+def arc_path(arc_begin, arc_end, arc_center, radius_nm, clockwise):
+  """build a list of lat.lon coordinates defining points along an arc
+  
+  arc_begin: tuple defining the starting point (lat, lon) in decimal degrees,+N, +E
+  arc_end: tuple defining the ending point (lat, lon) in decimal degrees,+N, +E
+  arc_center: tuple defining the center point (lat, lon) in decimal degrees,+N, +E
+  radius_nm: arc radius in nautical miles
+  clockwise: bool defining arc direction
+  """
+  # convert our points
+  begin = utm.from_latlon(*arc_begin)
+  end = utm.from_latlon(*arc_end)
+  center = utm.from_latlon(*arc_center)
+  radius = 1852.0 * radius_nm
+  utm.from_latlon
+  
+  utm_zone = center[2]
+  utm_letter = center[3]
+  
+  if center[0] >= 0.0:
+    northern_hemisphere = True
+  else:
+    northern_hemisphere = False
+  
+  
+  # find the azimuth angles to the points
+  bearing1 = get_azimuth((center[0], center[1]), (begin[0], begin[1]))
+  bearing2 = get_azimuth((center[0], center[1]), (end[0], end[1]))
+  
+  # find the azimuth we need to sweep through
+  if clockwise:
+    if bearing2 >= bearing1:
+      degrees_of_turn = bearing2 - bearing1
+    else:
+      degrees_of_turn = 360.0 + bearing2 - bearing1
+  else: # left turn
+    if bearing2 < bearing1:
+      degrees_of_turn = bearing2 - bearing1
+    else:
+      degrees_of_turn = 360.0 - bearing2 + bearing1
+  
+  # figure out how many steps we need to take
+  if degrees_of_turn < 6.0:
+    steps = 2
+  else:
+    steps = int(degrees_of_turn/3.0)+1
+  stepsize = degrees_of_turn / float(steps)
+  
+  arclist = []
+  for i in range(steps+1):
+    theta = math.radians(bearing1 + i*stepsize)
+    point = [radius*math.sin(theta)+center[0], radius*math.cos(theta)+center[1]]
+    arclist.append((utm.to_latlon(point[0], point[1], utm_zone, utm_letter, strict=False)))
+    
+  return arclist
+      
+  
 def arcpoints(waypoint1, waypoint2, radius_nm, heading1_deg_mag, heading2_deg_mag, turn_direction, variation):
   """build a list of lat/lon coordinates defining points along an arc
   
@@ -176,6 +233,16 @@ def arcpoints(waypoint1, waypoint2, radius_nm, heading1_deg_mag, heading2_deg_ma
     arclist.append(utm.to_latlon(point[0], point[1], wp1[2], northern=northern_hemisphere))
 
   return arclist
+
+def get_azimuth(pt1, pt2):
+  deast = pt2[0] - pt1[0]
+  dnorth = pt2[1] - pt1[1]
+  return math.degrees(math.atan2(deast, dnorth))
+
+def get_distance(pt1, pt2):
+  deast = pt2[0] - pt1[0]
+  dnorth = pt2[1] - pt1[1]
+  return math.sqrt(deast**2 + dnorth**2)
 
 def dms2deg(lathem, latdeg, latmin, latsec, lonhem, londeg, lonmin, lonsec):
   """convert latitude and longitude to decimal degrees with the appropriate sign (+N -S, +E, -W)

@@ -37,13 +37,30 @@ class CIFPReader:
   WAYPOINT = namedtuple('WAYPOINT', 'ident, latitude, longitude, declination, name')
   
   AIRPORT = namedtuple('AIRPORT', 'icao_code, latitude, longitude, declination, elevation, name')
+  RUNWAY = namedtuple('RUNWAY', 'airport, runway, length, bearing, latitude, longitude, elevation, dthreshold, tch, width')
   
   UC_DATA = namedtuple('UC_Data', 'airspace_type, airspace_center, airspace_classification,'\
                        ' multiple_code, sequence_number,'\
                        ' continuation_record_number, boundary_via, latitude, longitude,'\
-                       ' arc_origin_latitude, arc_origin_longitude, arc_distance, arc_bearing')
-  def __init__(self):
+                       ' arc_origin_latitude, arc_origin_longitude, arc_distance, arc_bearing, name')
+  
+  
+  def __init__(self, lat_min, lat_max, lon_min, lon_max):
+    self.lat_min = lat_min
+    self.lat_max = lat_max
+    self.lon_min = lon_min
+    self.lon_max = lon_max
+    
+    
     return
+  
+  def in_roi(self, lat, lon):
+    if lat == None or lon == None:
+      return False
+    
+    if self.lat_min <= lat and lat <= self.lat_max and self.lon_min <= lon and lon <= self.lon_max:
+      return True 
+    return False
   
   @staticmethod
   def get_record_info(record):
@@ -102,6 +119,16 @@ class CIFPReader:
                   L: CCW Arc
                   R: CW Arc"""
     # SUSAUCK2ZKBJC PAD  A00100     CE                   N39543200W1050702000050       GND  A07999MDENVER                        473321703
+    
+    # SUSAUCK2ZKEGE PAD  A00100     G N39342405W106564855                              GND  A09100MEAGLE                         473842004
+    # SUSAUCK2ZKEGE PAD  A00200     R N39322480W106574152N39383390W10654574000651990                                             473852004
+    # SUSAUCK2ZKEGE PAD  A00300     G N39392116W107031860                                                                        473862004
+    # SUSAUCK2ZKEGE PAD  A00400     R N39390596W107003665N39383390W10654574000442770                                             473872004
+    # SUSAUCK2ZKEGE PAD  A00500     G N39414066W106505555                                                                        473882004
+    # SUSAUCK2ZKEGE PAD  A00600     R N39430974W106490000N39383390W10654574000650450                                             473892004
+    # SUSAUCK2ZKEGE PAD  A00700     G N39370580W106464564                                                                        473902004
+    # SUSAUCK2ZKEGE PAD  A00800     REN39373433W106492447N39383390W10654574000441030                                             473912004
+
     # SUSAUCK2ZKBKF PAD  A00100     R N39393650W104402500N39420630W10445071000441245   GND  A07499MAURORA                        473331703
     # SUSAUCK2ZKBKF PAD  A00200     G N39460130W104474270                                                                        473341703
     # SUSAUCK2ZKBKF PAD  A00300     G N39455530W104472450                                                                        473351703
@@ -135,10 +162,11 @@ class CIFPReader:
     arc_origin_longitude = CIFPReader.parse_lon(record[60:70])
     arc_distance = CIFPReader.parse_float(record[70:74], 10.0)
     arc_bearing = CIFPReader.parse_float(record[74:78], 10.0)
+    name = record[93:123].rstrip()
 
     return CIFPReader.UC_DATA(airspace_type, airspace_center, airspace_classification, multiple_code, 
                               sequence_number, continuation_record_number, boundary_via, latitude, longitude, 
-                              arc_origin_latitude, arc_origin_longitude, arc_distance, arc_bearing)
+                              arc_origin_latitude, arc_origin_longitude, arc_distance, arc_bearing, name)
   
   @staticmethod
   def parse_vhf_navaid(record):
@@ -184,6 +212,10 @@ class CIFPReader:
     # SPACDB       AJA   PG003850H  W N13271270E144441296                       E0020           NARMT MACAJNA                    179711806
     # SSPADB       LOG   NS002420H MW S14211350W170445620                       E0120           NARLOGOTALA HILL                 226441703
     # SUSADB       AA    K3003650HOLW N47003259W096485466                       E0040           NARKENIE                         246741805
+    # PN Airport and Heliport Terminal NDB 3.2.4.13
+    # SLAMPNTISXTI ST    TI002410HO W N17413092W064530474                       W0130           NARPESTE                         176801605
+    # SPACPNPHNLPH HN    PH002420HO W N21192970W158025590                       E0110           NAREWABE                         221111410
+    # SUSAPN3J7 K7 VV    K7003530HO W N33384708W083011836                       W0050           NARJUNNE                         439711610
     # 123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012
     #          1         2         3         4         5         6         7         8         9         10        11        12        13
     # make sure this isn't a continuation record
@@ -267,6 +299,35 @@ class CIFPReader:
     return CIFPReader.AIRPORT(icao_code, latitude, longitude, declination, elevation, name)
   
   @staticmethod
+  def parse_runway(record):
+    """
+    """
+    # PG Airport Runway 3.2.4.7
+    # SCANP 01A PAGRW05    0011760463 N62562477W152162256               02034000050050D                                          042001703
+    # SLAMP TISTTIGRW10    0070001000 N18201272W064590034               00024000055150I                                          169431613
+    # SPACP PGROPGGRW09    0070000900 N14102878E145135249               00586000045150R                                          195061404
+    # SSPAP NSASNSGRW08    0020000860 S14110237W169402216               00009000050060D                                          226531703
+    # SUSAP 00ARK3GRW18    0025361765 N38582010W097360830               01328000050250D                                          753212002
+    # 123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012
+    #          1         2         3         4         5         6         7         8         9         10        11        12        13
+    if record[21] == "0":
+      # first record only
+      airport = record[6:10].rstrip()
+      runway = record[13:18].rstrip()
+      length = CIFPReader.parse_float(record[22:27])
+      bearing = CIFPReader.parse_float(record[27:31], 10.0)
+      latitude = CIFPReader.parse_lat(record[32:41])
+      longitude = CIFPReader.parse_lon(record[41:51])
+      elevation = CIFPReader.parse_float(record[66:71])
+      dthreshold = CIFPReader.parse_float(record[71:75])
+      tch = CIFPReader.parse_float(record[75:77])
+      width = CIFPReader.parse_float(record[77:80])
+    else:
+      return None
+    
+    return CIFPReader.RUNWAY(airport, runway, length, bearing, latitude, longitude, elevation, dthreshold, tch, width)
+  
+  @staticmethod
   def parse_float(fstr, divisor=1.0):
     # if fstr is empty we are done
     if fstr.strip() == "":
@@ -331,14 +392,28 @@ class CIFPReader:
 # define a version for this file
 VERSION = "1.0"
 
+
 if __name__ == '__main__':
   # when this file is run directly, run this code
   print(VERSION)
+  
+  # define the area of interest
+  lat_min = 36.0
+  lat_max = 44.5
+  lon_min = -110.0
+  lon_max = -98.0
+  
+  cifp = CIFPReader(lat_min, lat_max, lon_min, lon_max)
   
   vhf_navaids = {}
   ndbs = {}
   airports = {}
   waypoints = {}
+  runways = {}
+  uc_airspace = {}
+  
+  first_uc = True
+  uc_id = ""
   
   with open(r"C:\Data\CIFP\CIFP_200521\FAACIFP18", "r") as f:
     seen = []
@@ -350,36 +425,122 @@ if __name__ == '__main__':
       if info.section_code == "D" and info.subsection_code == " ":
         # ident, frequency, latitude, longitude, declination, name
         data = CIFPReader.parse_vhf_navaid(line)
-        if data != None:
+        if data != None and cifp.in_roi(data.latitude, data.longitude):
           vhf_navaids[data.ident] = data
       
       # DB NDB Navaid 3.2.2.2
+      # PN Airport and Heliport Terminal NDB 3.2.4.13
       if (info.section_code == "D" and info.subsection_code == "B") or (info.section_code == "P" and info.subsection_code == "N"):
         # ident, frequency, latitude, longitude, declination, name
         data = CIFPReader.parse_ndbs(line)
-        if data != None:
+        if data != None and cifp.in_roi(data.latitude, data.longitude):
           ndbs[data.ident] = data
       
       # PA Airport Reference Points 3.2.4.1
       if info.section_code == "P" and info.subsection_code == "A":
         # icao_code, lat, lon, var, el, name
         data = CIFPReader.parse_airport_primary_record(line)
-        if data != None:
+        if data != None and cifp.in_roi(data.latitude, data.longitude):
           airports[data.icao_code] = data
-        
       
       # EA Enroute Waypoint 3.2.3.1
       # PC Airport Terminal Waypoints 3.2.4.3
-      if info.section_code == "E" and info.subsection_code == "A":
+      if (info.section_code == "E" and info.subsection_code == "A") or (info.section_code == "P" and info.subsection_code == "C"):
         # ident, frequency, latitude, longitude, declination, name
         data = CIFPReader.parse_waypoint(line)
-        if data != None:
+        if data != None and cifp.in_roi(data.latitude, data.longitude):
           waypoints[data.ident] = data
+      
+      # PG Airport Runway 3.2.4.7
+      if (info.section_code == "P" and info.subsection_code == "G"):
+        # airport, runway, length, bearing, latitude, longitude, elevation, dthreshold, tch, width
+        data = CIFPReader.parse_runway(line)
+        if data != None and cifp.in_roi(data.latitude, data.longitude):
+          runways[data.airport+'_'+data.runway] = data
 
-      # PN Airport and Heliport Terminal NDB 3.2.4.13
-      # SLAMPNTISXTI ST    TI002410HO W N17413092W064530474                       W0130           NARPESTE                         176801605
-      # SPACPNPHNLPH HN    PH002420HO W N21192970W158025590                       E0110           NAREWABE                         221111410
-      # SUSAPN3J7 K7 VV    K7003530HO W N33384708W083011836                       W0050           NARJUNNE                         439711610
+      # UC Controlled Airspace 3.2.6.3
+      if info.section_code == "U" and info.subsection_code == "C":
+        data = CIFPReader.parse_controlled_airspace(line)
+        # is this even in our ROI?
+        if cifp.in_roi(data.arc_origin_latitude, data.arc_origin_longitude) or cifp.in_roi(data.latitude, data.longitude):
+          if first_uc:
+            uc_id = data.airspace_center+'_Class_'+data.airspace_classification+'_part'+data.multiple_code
+            if data.boundary_via == "CE":
+              # this is a complete shape for this airport, save and reset
+              uc_airspace[uc_id] = maptools.circle((data.arc_origin_latitude, data.arc_origin_longitude), data.arc_distance)
+              first_uc = True
+              uc_id = ''
+            else:
+              # save this point and continue
+              uc_current = [data]
+              first_uc = False
+          else:
+            # add this point to our list
+            uc_current.append(data)
+            
+            # is this the last point in the shape?
+            if data.boundary_via[1] == "E":
+              # process this shape, begin with the first point
+              shape = [(uc_current[0].latitude, uc_current[0].longitude)]
+              for i in range(len(uc_current)):
+                if uc_current[i].boundary_via[0] == "A":
+                  # arc by edge
+                  print("Arc by edge not yet supported")
+                elif uc_current[i].boundary_via[0] == "C":
+                  # circle
+                  print("Circle should have been supported above")
+                elif uc_current[i].boundary_via[0] == "G":
+                  # great circle
+                  # simply add the next point
+                  if uc_current[i].boundary_via[1] == "E":
+                    shape.append((uc_current[0].latitude, uc_current[0].longitude))
+                  else:
+                    shape.append((uc_current[i+1].latitude, uc_current[i+1].longitude))
+                elif uc_current[i].boundary_via[0] == "H":
+                  # rhumb line
+                  print("Rhumb line not yet supported")
+                elif uc_current[i].boundary_via[0] == "L" or uc_current[i].boundary_via[0] == "R":
+                  # CCW arc
+                  arc_begin = (uc_current[i].latitude, uc_current[i].longitude)
+                  
+                  if uc_current[i].boundary_via[1] == "E":
+                    arc_end = (uc_current[0].latitude, uc_current[0].longitude)
+                  else:
+                    arc_end = (uc_current[i+1].latitude, uc_current[i+1].longitude)
+                    
+                  arc_center = (uc_current[i].arc_origin_latitude, uc_current[i].arc_origin_longitude)
+                  
+                  radius_nm = uc_current[i].arc_distance
+                  
+                  if uc_current[i].boundary_via == "R":
+                    clockwise = True
+                  else:
+                    clockwise = False
+                  #print(uc_current[i])
+                  #print(arc_begin)
+                  #print(arc_end)
+                  #print(arc_center)
+                  arc = maptools.arc_path(arc_begin, arc_end, arc_center, radius_nm, clockwise)
+                  for p in arc:
+                    shape.append(p)
+                else:
+                  print("Unrecognized boundary via")
+                  print(data)
+              
+              # add the shape 
+              uc_airspace[uc_id] = shape
+              first_uc = True
+              uc_id = ''
+            
+            
+            # airspace_type, airspace_center, airspace_classification, multiple_code, 
+            # sequence_number, continuation_record_number, boundary_via, latitude, longitude, 
+            # arc_origin_latitude, arc_origin_longitude, arc_distance, arc_bearing, name
+          
+            
+          
+   
+
             
       # ER Enroute Airways 3.2.3.4
       # SCANER       A1          0150BBGVPPAEA0E    O                         312104802987 05200                                   024982002
@@ -387,17 +548,6 @@ if __name__ == '__main__':
       # SLAMER       A517        0100ZPATATJEA0E    O                         34900375     06000     45000                         167211901
       # SPACER       A216        0100MONPIP EA0E    O                         16302692     18000     60000                         188692002
       # SUSAER       A1          0110CFMTLK1EA0E    O                         22290226     02800                                   510572002      
-      
-      
-
-      
-      # PG Airport Runway 3.2.4.7
-      # SCANP 01A PAGRW05    0011760463 N62562477W152162256               02034000050050D                                          042001703
-      # SLAMP TISTTIGRW10    0070001000 N18201272W064590034               00024000055150I                                          169431613
-      # SPACP PGROPGGRW09    0070000900 N14102878E145135249               00586000045150R                                          195061404
-      # SSPAP NSASNSGRW08    0020000860 S14110237W169402216               00009000050060D                                          226531703
-      # SUSAP 00ARK3GRW18    0025361765 N38582010W097360830               01328000050250D                                          753212002
-      
       
       # PF Airport Approaches 3.2.4.6
       # SUSAP 00R K4FR30   ADAS   010DAS  K4D 0V       IF                                             18000                 B JS   753670804
@@ -420,8 +570,6 @@ if __name__ == '__main__':
       # UR Restrictive Airspace 3.2.6.1
       # SUSAURK1A680       A00100L    CE                   N48105900W1223805000030       GND  A03000MA-680                         553831703
       
-      
-      
       # No need to process
       # AS Minimum Off Route Airway 3.2.8
       # S   AS       N04E150          UNKUNKUNKUNKUNKUNKUNKUNKUNKUNKUNKUNKUNKUNKUNKUNKUNKUNKUNKUNKUNKUNKUNKUNKUNKUNKUNKUNKUNKUNK   000011703
@@ -443,9 +591,6 @@ if __name__ == '__main__':
       
      
       
-
-      
-      
       """
       if info[3] == "KBKF":
         if info[2] == 'U' and info[4] == 'C':
@@ -463,8 +608,9 @@ if __name__ == '__main__':
           
           for point in points:
             outfile.write("{:.6f}+{:.6f}\n".format(point[0], point[1]))
-          outfile.write("-1\n")m
-          outfile.close()"""
+          outfile.write("-1\n")
+          outfile.close()
+"""
    
   # write out the VHF Navaids
   outfile = open(r"C:\Data\CIFP\CIFP_200521\Processed\VORs.csv", 'w')
@@ -514,6 +660,31 @@ if __name__ == '__main__':
                                                                        waypoint.declination))
   outfile.close()
   
+  # write out the Runways
+  outfile = open(r"C:\Data\CIFP\CIFP_200521\Processed\Runways.csv", 'w')
+  outfile.write("runway,latitude,longitude,notes\n")
+  for data in runways.values():
+    outfile.write("{},{:.6f},{:.6f},Airport:{} length:{:.0f} Bearing:{:.1f} Elevation:{:.0f} DThr:{:.0f} TCH:{:.0f} Width:{:.0f}\n".format(data.runway,
+                                                                                                                                           data.latitude,
+                                                                                                                                           data.longitude,
+                                                                                                                                           data.airport,
+                                                                                                                                           data.length,
+                                                                                                                                           data.bearing,
+                                                                                                                                           data.elevation,
+                                                                                                                                           data.dthreshold,
+                                                                                                                                           data.tch,
+                                                                                                                                           data.width))
+  outfile.close()
+  
+  # write out the airspace
+  outfile = open(r"C:\Data\CIFP\CIFP_200521\Processed\Airspace.csv", 'w')
+  outfile.write("ident,latitude,longitude\n")
+  for ident, shape in uc_airspace.items():
+    for point in shape:
+      outfile.write("{},{:.6f},{:.6f}\n".format(ident, point[0], point[1]))
+
+
+
   print("Done.")
   
       
