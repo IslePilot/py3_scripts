@@ -163,7 +163,7 @@ class CIFPReader:
     arc_distance = CIFPReader.parse_float(record[70:74], 10.0)
     arc_bearing = CIFPReader.parse_float(record[74:78], 10.0)
     name = record[93:123].rstrip()
-
+    
     return CIFPReader.UC_DATA(airspace_type, airspace_center, airspace_classification, multiple_code, 
                               sequence_number, continuation_record_number, boundary_via, latitude, longitude, 
                               arc_origin_latitude, arc_origin_longitude, arc_distance, arc_bearing, name)
@@ -324,7 +324,7 @@ class CIFPReader:
       width = CIFPReader.parse_float(record[77:80])
     else:
       return None
-    
+
     return CIFPReader.RUNWAY(airport, runway, length, bearing, latitude, longitude, elevation, dthreshold, tch, width)
   
   @staticmethod
@@ -479,7 +479,8 @@ if __name__ == '__main__':
             uc_current.append(data)
             
             # is this the last point in the shape?
-            if data.boundary_via[1] == "E":
+            last = data.boundary_via[1] == "E"
+            if last:
               # process this shape, begin with the first point
               shape = [(uc_current[0].latitude, uc_current[0].longitude)]
               for i in range(len(uc_current)):
@@ -492,7 +493,7 @@ if __name__ == '__main__':
                 elif uc_current[i].boundary_via[0] == "G":
                   # great circle
                   # simply add the next point
-                  if uc_current[i].boundary_via[1] == "E":
+                  if uc_current[i].boundary_via[1] == 'E':
                     shape.append((uc_current[0].latitude, uc_current[0].longitude))
                   else:
                     shape.append((uc_current[i+1].latitude, uc_current[i+1].longitude))
@@ -503,7 +504,7 @@ if __name__ == '__main__':
                   # CCW arc
                   arc_begin = (uc_current[i].latitude, uc_current[i].longitude)
                   
-                  if uc_current[i].boundary_via[1] == "E":
+                  if uc_current[i].boundary_via[1] == 'E':
                     arc_end = (uc_current[0].latitude, uc_current[0].longitude)
                   else:
                     arc_end = (uc_current[i+1].latitude, uc_current[i+1].longitude)
@@ -512,14 +513,10 @@ if __name__ == '__main__':
                   
                   radius_nm = uc_current[i].arc_distance
                   
-                  if uc_current[i].boundary_via == "R":
+                  if uc_current[i].boundary_via[0] == "R":
                     clockwise = True
                   else:
                     clockwise = False
-                  #print(uc_current[i])
-                  #print(arc_begin)
-                  #print(arc_end)
-                  #print(arc_center)
                   arc = maptools.arc_path(arc_begin, arc_end, arc_center, radius_nm, clockwise)
                   for p in arc:
                     shape.append(p)
@@ -678,12 +675,21 @@ if __name__ == '__main__':
   
   # write out the airspace
   outfile = open(r"C:\Data\CIFP\CIFP_200521\Processed\Airspace.csv", 'w')
-  outfile.write("ident,latitude,longitude\n")
+  outfile.write("latitude,longitude,notes\n")
   for ident, shape in uc_airspace.items():
     for point in shape:
-      outfile.write("{},{:.6f},{:.6f}\n".format(ident, point[0], point[1]))
+      outfile.write("{:.6f},{:.6f},{}\n".format(point[0], point[1], ident))
+  outfile.close()
 
-
+  
+  for ident, shape in uc_airspace.items():
+    outfile = open("C:\Data\CIFP\CIFP_200521\Processed\{}.csv".format(ident), 'w')
+    outfile.write("name,latitude,longitude,notes\n")
+    i=0
+    for point in shape:
+      i+=1
+      outfile.write("{},{:.6f},{:.6f},{}\n".format(i, point[0], point[1], ident))
+    outfile.close()
 
   print("Done.")
   

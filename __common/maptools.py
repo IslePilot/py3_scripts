@@ -74,20 +74,19 @@ def arc_path(arc_begin, arc_end, arc_center, radius_nm, clockwise):
   end = utm.from_latlon(*arc_end)
   center = utm.from_latlon(*arc_center)
   radius = 1852.0 * radius_nm
-  utm.from_latlon
   
   utm_zone = center[2]
   utm_letter = center[3]
   
-  if center[0] >= 0.0:
-    northern_hemisphere = True
-  else:
-    northern_hemisphere = False
-  
-  
   # find the azimuth angles to the points
-  bearing1 = get_azimuth((center[0], center[1]), (begin[0], begin[1]))
-  bearing2 = get_azimuth((center[0], center[1]), (end[0], end[1]))
+  bearing1 = get_azimuth(center, begin)
+  bearing2 = get_azimuth(center, end)
+  radius1 = get_distance(center, begin)
+  radius2 = get_distance(center, end)
+  
+  if abs(radius-radius1) > 200 or abs(radius-radius2) > 200:
+    print("Warning specified radius is more than 200 meters different than computed radius: begin:{:.2f} end:{:.2f}".format(radius-radius1, radius-radius2))
+
   
   # find the azimuth we need to sweep through
   if clockwise:
@@ -95,17 +94,17 @@ def arc_path(arc_begin, arc_end, arc_center, radius_nm, clockwise):
       degrees_of_turn = bearing2 - bearing1
     else:
       degrees_of_turn = 360.0 + bearing2 - bearing1
-  else: # left turn
+  else: # CCW
     if bearing2 < bearing1:
-      degrees_of_turn = bearing2 - bearing1
+      degrees_of_turn = bearing2 - bearing1  # notice negative number
     else:
-      degrees_of_turn = 360.0 - bearing2 + bearing1
+      degrees_of_turn = (bearing2-360.0) - bearing1
   
   # figure out how many steps we need to take
-  if degrees_of_turn < 6.0:
+  if abs(degrees_of_turn) < 6.0:
     steps = 2
   else:
-    steps = int(degrees_of_turn/3.0)+1
+    steps = int(abs(degrees_of_turn)/3.0)+1
   stepsize = degrees_of_turn / float(steps)
   
   arclist = []
@@ -237,7 +236,7 @@ def arcpoints(waypoint1, waypoint2, radius_nm, heading1_deg_mag, heading2_deg_ma
 def get_azimuth(pt1, pt2):
   deast = pt2[0] - pt1[0]
   dnorth = pt2[1] - pt1[1]
-  return math.degrees(math.atan2(deast, dnorth))
+  return (math.degrees(math.atan2(deast, dnorth))+360.0)%360.0
 
 def get_distance(pt1, pt2):
   deast = pt2[0] - pt1[0]
