@@ -115,6 +115,57 @@ def arc_path(arc_begin, arc_end, arc_center, radius_nm, clockwise):
     
   return arclist
       
+def build_runway(arrival_end, departure_end, width_ft, bearing, declination):
+  """
+  """
+  easting, northing, zone_number, zone_letter = utm.from_latlon(*arrival_end)
+  op_easting, op_northing, _, _ = utm.from_latlon(*departure_end, zone_number, zone_letter)
+  
+  halfwidth = (0.3048 * width_ft)/2.0
+  
+  # correct for declination and utm rotation
+  true_heading = bearing - declination
+  true_heading -= get_utm_rotation(*arrival_end)
+  
+  # compute the angles to our points
+  left = math.radians(true_heading-90.0)
+  right = math.radians(true_heading+90.0)
+  
+  # compute the corners of the runway
+  l_easting = easting + halfwidth * math.sin(left)
+  l_northing = northing + halfwidth * math.cos(left)
+  r_easting = easting + halfwidth * math.sin(right)
+  r_northing = northing + halfwidth * math.cos(right)
+  
+  lo_easting = op_easting + halfwidth * math.sin(left)
+  lo_northing = op_northing + halfwidth * math.cos(left)
+  ro_easting = op_easting + halfwidth * math.sin(right)
+  ro_northing = op_northing + halfwidth * math.cos(right)
+  
+  points = []
+  points.append(utm.to_latlon(l_easting, l_northing, zone_number, zone_letter, strict=False))
+  points.append(utm.to_latlon(lo_easting, lo_northing, zone_number, zone_letter, strict=False))
+  points.append(utm.to_latlon(ro_easting, ro_northing, zone_number, zone_letter, strict=False))
+  points.append(utm.to_latlon(r_easting, r_northing, zone_number, zone_letter, strict=False))
+  points.append(utm.to_latlon(l_easting, l_northing, zone_number, zone_letter, strict=False))
+  
+  return points
+
+def get_utm_rotation(lat, lon):
+  # get the utm for the point
+  p1_easting, p1_northing, zone_number, zone_letter = utm.from_latlon(lat, lon)
+  p1 = (p1_easting, p1_northing)
+  
+  # get the utm for a point 0.01 degrees north
+  p2_easting, p2_northing, _, _ = utm.from_latlon(lat+0.01, lon, zone_number, zone_letter) # force zone to be the same
+  p2 = (p2_easting, p2_northing)
+  
+  az= get_azimuth(p1, p2)
+  if az > 180.0:
+    az -= 360.0
+  
+  return az
+  
   
 def arcpoints(waypoint1, waypoint2, radius_nm, heading1_deg_mag, heading2_deg_mag, turn_direction, variation):
   """build a list of lat/lon coordinates defining points along an arc
@@ -271,6 +322,11 @@ VERSION = "1.0"
 
 if __name__ == '__main__':
   # when this file is run directly, run this code
+  
+  # test UTM rotation
+  print(get_utm_rotation(40.06389444, -105.0441778))
+  
+  print(build_runway((39.901375, -105.101919), (39.915292, -105.128414), 100.0, 295.0, -9.0))
   
   # Test Code
   # CEPEE

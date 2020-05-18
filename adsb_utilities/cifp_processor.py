@@ -313,7 +313,7 @@ class CIFPReader:
     if record[21] == "0":
       # first record only
       airport = record[6:10].rstrip()
-      runway = record[13:18].rstrip()
+      runway = record[13:18]
       length = CIFPReader.parse_float(record[22:27])
       bearing = CIFPReader.parse_float(record[27:31], 10.0)
       latitude = CIFPReader.parse_lat(record[32:41])
@@ -528,17 +528,7 @@ if __name__ == '__main__':
               uc_airspace[uc_id] = shape
               first_uc = True
               uc_id = ''
-            
-            
-            # airspace_type, airspace_center, airspace_classification, multiple_code, 
-            # sequence_number, continuation_record_number, boundary_via, latitude, longitude, 
-            # arc_origin_latitude, arc_origin_longitude, arc_distance, arc_bearing, name
-          
-            
-          
-   
-
-            
+                 
       # ER Enroute Airways 3.2.3.4
       # SCANER       A1          0150BBGVPPAEA0E    O                         312104802987 05200                                   024982002
       # SEEUER       B96         0100LARSAUHEA0E    O                         12050213     05000     18000                         165712006
@@ -568,8 +558,6 @@ if __name__ == '__main__':
       # SUSAURK1A680       A00100L    CE                   N48105900W1223805000030       GND  A03000MA-680                         553831703
       
       # No need to process
-      # AS Minimum Off Route Airway 3.2.8
-      # S   AS       N04E150          UNKUNKUNKUNKUNKUNKUNKUNKUNKUNKUNKUNKUNKUNKUNKUNKUNKUNKUNKUNKUNKUNKUNKUNKUNKUNKUNKUNKUNKUNK   000011703
       
       # HA Heliport 3.3.3
       # SUSAH 00A K6A00AH1   0     NARN N40041500W074560100W012000011         1800018000C    080080M TOTAL RF                      689881703
@@ -579,35 +567,7 @@ if __name__ == '__main__':
       
       # HF Heliport Approaches 3.3.7
       # SUSAH 87N K6FR190  ACCC   010CCC  K6D 0V       IF                                             18000                 B JH   721691505
-      
-      # HS Heliport Minimum Safe Altitude 3.3.8
-      # SUSAH 87N K6SCRANNK6HC                0   18018001925                                                                  M   721811505
-      
-      # PS Minimum Safe Altitude 3.2.4.11
-      # SUSAP 00R K4SDILKSK4PC                0   18018003125                                                                  M   753791310
-      
-     
-      
-      """
-      if info[3] == "KBKF":
-        if info[2] == 'U' and info[4] == 'C':
-          uc_data = CIFPReader.parse_controlled_airspace(line)
-          print(uc_data)
-      
-      if info[3] == "KBJC":
-        if info[2] == 'U' and info[4] == 'C':
-          uc_data = CIFPReader.parse_controlled_airspace(line)
-          print(uc_data)
-          points = maptools.circle((uc_data.arc_origin_latitude, uc_data.arc_origin_longitude), uc_data.arc_distance)
-          outfile = open("c:\\temp\\{}_Class{}.out".format(uc_data.airspace_center, uc_data.airspace_classification), "w")
-          outfile.write("{{{}_Class_{}}}\n".format(uc_data.airspace_center, uc_data.airspace_classification))
-          outfile.write("$TYPE=6\n")
-          
-          for point in points:
-            outfile.write("{:.6f}+{:.6f}\n".format(point[0], point[1]))
-          outfile.write("-1\n")
-          outfile.close()
-"""
+
    
   # write out the VHF Navaids
   outfile = open(r"C:\Data\CIFP\CIFP_200521\Processed\VORs.csv", 'w')
@@ -658,20 +618,62 @@ if __name__ == '__main__':
   outfile.close()
   
   # write out the Runways
-  outfile = open(r"C:\Data\CIFP\CIFP_200521\Processed\Runways.csv", 'w')
-  outfile.write("runway,latitude,longitude,notes\n")
-  for data in runways.values():
-    outfile.write("{},{:.6f},{:.6f},Airport:{} length:{:.0f} Bearing:{:.1f} Elevation:{:.0f} DThr:{:.0f} TCH:{:.0f} Width:{:.0f}\n".format(data.runway,
-                                                                                                                                           data.latitude,
-                                                                                                                                           data.longitude,
-                                                                                                                                           data.airport,
-                                                                                                                                           data.length,
-                                                                                                                                           data.bearing,
-                                                                                                                                           data.elevation,
-                                                                                                                                           data.dthreshold,
-                                                                                                                                           data.tch,
-                                                                                                                                           data.width))
+  done = []
+  outfile = open(r"C:\Data\CIFP\CIFP_200521\Processed\Runways.out", 'w')
+  csvfile = open(r"C:\Data\CIFP\CIFP_200521\Processed\Runways.csv", 'w')
+  csvfile.write("runway,latitude,longitude\n")
+  for name, data in runways.items():
+    # is this a real runway number?
+    if len(data.runway.rstrip()) < 4:
+      print("Skipping {}".format(name))
+      continue
+    
+    # if we haven't done this runway, build it
+    if name not in done:    
+      # find the opposite runway name
+      num = int(data.runway[2:4])
+      side = data.runway[4]
+      op_num = (num+18)%36
+      if side == "L":
+        op_side = "R"
+      elif side == "R":
+        op_side = "L"
+      else:
+        op_side = side
+      op_runway = "RW{:02d}{}".format(op_num, op_side)
+      op_name = data.airport+'_'+op_runway
+      
+      # add both names to our list so we don't do them again
+      done.append(name)
+      done.append(op_name)
+      
+      # find the opposite end
+      if op_name in runways:
+        op_data = runways[op_name]
+      else:
+        print("{} not found in runways[]".format(op_name))
+        continue
+      
+      # get our runway points
+      arrival_end = (data.latitude, data.longitude)
+      departure_end = (op_data.latitude, op_data.longitude)
+      
+      if data.airport in airports:
+        declination = airports[data.airport].declination
+      else:
+        print("{} not found in airports[]".format(data.airport))
+        continue
+      
+      outfile.write("{{{}_{}}}\n".format(data.airport, data.runway))
+      outfile.write("$TYPE=2\n")
+      points = maptools.build_runway(arrival_end, departure_end, data.width, data.bearing, declination)
+      for p in points:
+        outfile.write("{:.6f}+{:.6f}\n".format(p[0], p[1]))
+        csvfile.write("{},{:.6f},{:.6f}\n".format(name, p[0], p[1]))
+      outfile.write("-1\n")
   outfile.close()
+  csvfile.close()
+
   
   # write out the airspace
   outfile = open(r"C:\Data\CIFP\CIFP_200521\Processed\Airspace.csv", 'w')
@@ -682,14 +684,14 @@ if __name__ == '__main__':
   outfile.close()
 
   
+  outfile = open("C:\Data\CIFP\CIFP_200521\Processed\Airspace.out", "w")
   for ident, shape in uc_airspace.items():
-    outfile = open("C:\Data\CIFP\CIFP_200521\Processed\{}.csv".format(ident), 'w')
-    outfile.write("name,latitude,longitude,notes\n")
-    i=0
+    outfile.write("{{{}}}\n".format(ident))
+    outfile.write("$TYPE=6\n")
     for point in shape:
-      i+=1
-      outfile.write("{},{:.6f},{:.6f},{}\n".format(i, point[0], point[1], ident))
-    outfile.close()
+      outfile.write("{:.6f}+{:.6f}\n".format(point[0], point[1]))
+    outfile.write("-1\n")
+  outfile.close()
 
   print("Done.")
   
