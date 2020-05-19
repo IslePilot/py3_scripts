@@ -29,6 +29,9 @@ sys.path.append("..")
 import __common.maptools as maptools
 
 from collections import namedtuple
+import utm
+import simplekml
+import gpxpy
     
 class CIFPReader:
   SECTIONS = namedtuple('SECTIONS', 'area_code, section_code, subsection_code')
@@ -392,7 +395,110 @@ class CIFPReader:
 # define a version for this file
 VERSION = "1.0"
 
+class WaypointsOut:
+  def __init__(self, path, filename, folder_name):
+    self.kml_filename = path + '\\' + filename + '.kml'
+    self.gpx_filename = path + '\\' + filename + '.gpx'
+    
+    self.configure_kml(folder_name)
+    
+    return
+  
+  def save_files(self):
+    # save the kml file
+    self.kml.save(self.kml_filename)
+    return
+  
+  def configure_kml(self, folder_name):
+    # create the kml document
+    self.kml = simplekml.Kml()
+    
+    # create the top level folder
+    self.kml.document.name = folder_name
+    
+    # create the folder structure
+    self.d_folder = self.kml.newfolder(name="VHF Navaids (D )")
+    self.db_folder = self.kml.newfolder(name="NDBs (DB)")
+    self.pn_folder = self.kml.newfolder(name="Terminal NDBs (PN)")
+    self.ea_folder = self.kml.newfolder(name="Enroute Waypoints (EA)")
+    self.pc_folder = self.kml.newfolder(name="Terminal Waypoints (PC)")
+    self.pa_folder = self.kml.newfolder(name="Airports (PA)")
+    self.pg_folder = self.kml.newfolder(name="Runways (PG)")
+    
+    return
+  
+  def add_point(self, station_type, identifier, latitude, longitude, elevation_ft=None, name=None, frequency=None, declination=None, runway=None,
+                length=None, bearing=None, width=None, dthreshold=None, tch=None):
+    # 'VHF_NAVAID', 'ident,    frequency, latitude, longitude, declination,            name'
+    # 'WAYPOINT',   'ident,               latitude, longitude, declination,            name'
+    # 'AIRPORT',    'icao_code,           latitude, longitude, declination, elevation, name'
+    # 'RUNWAY',     'airport, runway, length, bearing, latitude, longitude, elevation, dthreshold, tch, width'
+    
+    
+    # build our point with elevation if available
+    if elevation_ft != None:
+      # convert to meters
+      elevation = 0.3048 * elevation_ft
+      point = (longitude, latitude, elevation)
+    else:
+      point = (longitude, latitude)
+    
+    description = ''
+    if station_type == "D ":
+      description += "Name:{}\n".format(name)
+      description += "Frequency:{:.2f} MHz\n".format(frequency)
+      description += "Declination:{:.1f} degrees\n".format(declination)
+      pnt = self.d_folder.newpoint(name=identifier, description=description, coords=[point])
+    elif station_type == "DB":
+      description += "Name:{}\n".format(name)
+      description += "Frequency:{:.0f} kHz\n".format(frequency)
+      description += "Declination:{:.1f} degrees\n".format(declination)
+      pnt = self.db_folder.newpoint(name=identifier, description=description, coords=[point])
+    elif station_type == "PN":
+      description += "Name:{}\n".format(name)
+      description += "Frequency:{:.0f} kHz\n".format(frequency)
+      description += "Declination:{:.1f} degrees\n".format(declination)
+      pnt = self.pn_folder.newpoint(name=identifier, description=description, coords=[point])
+    elif station_type == "EA":
+      description += "Name:{}\n".format(name)
+      description += "Declination:{:.1f} degrees\n".format(declination)
+      pnt = self.ea_folder.newpoint(name=identifier, description=description, coords=[point])
+    elif station_type == "PC":
+      description += "Name:{}\n".format(name)
+      description += "Declination:{:.1f} degrees\n".format(declination)
+      pnt = self.pc_folder.newpoint(name=identifier, description=description, coords=[point])
+    elif station_type == "PA":
+      description += "Name:{}\n".format(name)
+      description += "Elevation:{} feet\n".format(elevation_ft)
+      description += "Declination:{:.1f} degrees\n".format(declination)
+      pnt = self.pa_folder.newpoint(name=identifier, description=description, coords=[point])
+    elif station_type == "PG":
+      description += "Name:{} {}\n".format(identifier, runway)
+      description += "Length:{:.0f} feet\n".format(length)
+      description += "Elevation:{} feet\n".format(elevation_ft)
+      description += "Runway Heading (mag):{:.1f} degrees\n".format(bearing)
+      description += "Ruway Width:{:.0f} feet\n".format(width)
+      description += "Threshold Crossover Height:{} feet\n".format(tch)
+      description += "Displaced Threshold Distance:{} feet\n".format(dthreshold)
+      pnt = self.pg_folder.newpoint(name="{}_{}".format(identifier, runway), description=description, coords=[point])
+    
+    # configure the point
+    if elevation_ft != None:
+      pnt.lookat = simplekml.LookAt(altitudemode=simplekml.AltitudeMode.absolute,
+                                    latitude=latitude,
+                                    longitude=longitude,
+                                    range=15000, heading=0.0, tilt=0.0)
+    else:
+      pnt.lookat = simplekml.LookAt(altitudemode=simplekml.AltitudeMode.clamptoground,
+                                    latitude=latitude,
+                                    longitude=longitude,
+                                    range=15000, heading=0.0, tilt=0.0)
+    
+    pnt.style.iconstyle.icon.href = "http://maps.google.com/mapfiles/kml/shapes/placemark_square.png"
+    
+    return
 
+  
 if __name__ == '__main__':
   # when this file is run directly, run this code
   print(VERSION)
@@ -404,6 +510,8 @@ if __name__ == '__main__':
   lon_max = -98.0
   
   cifp = CIFPReader(lat_min, lat_max, lon_min, lon_max)
+  
+  location_out = WaypointsOut(r"C:\Data\CIFP\CIFP_200521\Processed", "CIFP_200521_Locations", "Locations")
   
   vhf_navaids = {}
   ndbs = {}
@@ -423,40 +531,79 @@ if __name__ == '__main__':
       # D  VHF Navaid 3.2.2.1
       # Process All
       if info.section_code == "D" and info.subsection_code == " ":
-        # ident, frequency, latitude, longitude, declination, name
+        # 'ident, frequency, latitude, longitude, declination, name'
         data = CIFPReader.parse_vhf_navaid(line)
         if data != None and cifp.in_roi(data.latitude, data.longitude):
           vhf_navaids[data.ident] = data
+          location_out.add_point(station_type=info.section_code+info.subsection_code,
+                                 identifier=data.ident,
+                                 latitude=data.latitude,
+                                 longitude=data.longitude,
+                                 name=data.name,
+                                 frequency=data.frequency,
+                                 declination=data.declination)
       
       # DB NDB Navaid 3.2.2.2
       # PN Airport and Heliport Terminal NDB 3.2.4.13
       if (info.section_code == "D" and info.subsection_code == "B") or (info.section_code == "P" and info.subsection_code == "N"):
-        # ident, frequency, latitude, longitude, declination, name
+        # 'ident, frequency, latitude, longitude, declination, name'
         data = CIFPReader.parse_ndbs(line)
         if data != None and cifp.in_roi(data.latitude, data.longitude):
           ndbs[data.ident] = data
+          location_out.add_point(station_type=info.section_code+info.subsection_code,
+                                 identifier=data.ident,
+                                 latitude=data.latitude,
+                                 longitude=data.longitude,
+                                 name=data.name,
+                                 frequency=data.frequency,
+                                 declination=data.declination)
       
       # PA Airport Reference Points 3.2.4.1
       if info.section_code == "P" and info.subsection_code == "A":
-        # icao_code, lat, lon, var, el, name
+        # 'icao_code, latitude, longitude, declination, elevation, name'
         data = CIFPReader.parse_airport_primary_record(line)
         if data != None and cifp.in_roi(data.latitude, data.longitude):
           airports[data.icao_code] = data
+          location_out.add_point(station_type=info.section_code+info.subsection_code,
+                                 identifier=data.icao_code,
+                                 latitude=data.latitude,
+                                 longitude=data.longitude,
+                                 elevation_ft=data.elevation,
+                                 name=data.name,
+                                 declination=data.declination)
       
       # EA Enroute Waypoint 3.2.3.1
       # PC Airport Terminal Waypoints 3.2.4.3
       if (info.section_code == "E" and info.subsection_code == "A") or (info.section_code == "P" and info.subsection_code == "C"):
-        # ident, frequency, latitude, longitude, declination, name
+        # 'ident, latitude, longitude, declination, name'
         data = CIFPReader.parse_waypoint(line)
         if data != None and cifp.in_roi(data.latitude, data.longitude):
           waypoints[data.ident] = data
+          location_out.add_point(station_type=info.section_code+info.subsection_code,
+                                 identifier=data.ident,
+                                 latitude=data.latitude,
+                                 longitude=data.longitude,
+                                 name=data.name,
+                                 declination=data.declination)
       
       # PG Airport Runway 3.2.4.7
       if (info.section_code == "P" and info.subsection_code == "G"):
-        # airport, runway, length, bearing, latitude, longitude, elevation, dthreshold, tch, width
+        # 'airport, runway, length, bearing, latitude, longitude, elevation, dthreshold, tch, width'
         data = CIFPReader.parse_runway(line)
         if data != None and cifp.in_roi(data.latitude, data.longitude):
           runways[data.airport+'_'+data.runway] = data
+          location_out.add_point(station_type=info.section_code+info.subsection_code,
+                                 identifier=data.airport,
+                                 latitude=data.latitude,
+                                 longitude=data.longitude,
+                                 elevation_ft=data.elevation,
+                                 name=data.runway,
+                                 runway=data.runway,
+                                 length=data.length,
+                                 bearing=data.bearing,
+                                 width=data.width,
+                                 dthreshold=data.dthreshold,
+                                 tch=data.tch)
 
       # UC Controlled Airspace 3.2.6.3
       if info.section_code == "U" and info.subsection_code == "C":
@@ -569,59 +716,15 @@ if __name__ == '__main__':
       # SUSAH 87N K6FR190  ACCC   010CCC  K6D 0V       IF                                             18000                 B JH   721691505
 
    
-  # write out the VHF Navaids
-  outfile = open(r"C:\Data\CIFP\CIFP_200521\Processed\VORs.csv", 'w')
-  outfile.write("ident,latitude,longitude,notes\n")
-  for vor in vhf_navaids.values():
-    # ident, frequency, latitude, longitude, declination, name
-    outfile.write("{},{:.6f},{:.6f},Name:{} Frequency:{:.2f} Declination:{:.1f}\n".format(vor.ident,
-                                                                                          vor.latitude,
-                                                                                          vor.longitude,
-                                                                                          vor.name,
-                                                                                          vor.frequency,
-                                                                                          vor.declination))
-  outfile.close()
-  
-  # write out the NDBs
-  outfile = open(r"C:\Data\CIFP\CIFP_200521\Processed\NDBs.csv", 'w')
-  outfile.write("ident,latitude,longitude,notes\n")
-  for ndb in ndbs.values():
-    outfile.write("{},{:.6f},{:.6f},Name:{} Frequency:{:.0f} Declination:{:.1f}\n".format(ndb.ident,
-                                                                                          ndb.latitude,
-                                                                                          ndb.longitude,
-                                                                                          ndb.name,
-                                                                                          ndb.frequency,
-                                                                                          ndb.declination))
-  outfile.close()
-  
-  # write out the Airports
-  outfile = open(r"C:\Data\CIFP\CIFP_200521\Processed\Airports.csv", 'w')
-  outfile.write("ident,latitude,longitude,notes\n")
-  for airport in airports.values():
-    outfile.write("{},{:.6f},{:.6f},Name:{} Elevation:{:.0f} Variation:{:.1f}\n".format(airport.icao_code,
-                                                                                        airport.latitude,
-                                                                                        airport.longitude,
-                                                                                        airport.name,
-                                                                                        airport.elevation,
-                                                                                        airport.declination))
-  outfile.close()
-  
-  # write out the Waypoints
-  outfile = open(r"C:\Data\CIFP\CIFP_200521\Processed\Waypoints.csv", 'w')
-  outfile.write("ident,latitude,longitude,notes\n")
-  for waypoint in waypoints.values():
-    outfile.write("{},{:.6f},{:.6f},Name:{} Variation:{:.1f}\n".format(waypoint.ident,
-                                                                       waypoint.latitude,
-                                                                       waypoint.longitude,
-                                                                       waypoint.name,
-                                                                       waypoint.declination))
-  outfile.close()
+  # save the location files
+  location_out.save_files()
+
   
   # write out the Runways
+  # kml
+  # out
   done = []
   outfile = open(r"C:\Data\CIFP\CIFP_200521\Processed\Runways.out", 'w')
-  csvfile = open(r"C:\Data\CIFP\CIFP_200521\Processed\Runways.csv", 'w')
-  csvfile.write("runway,latitude,longitude\n")
   for name, data in runways.items():
     # is this a real runway number?
     if len(data.runway.rstrip()) < 4:
@@ -634,6 +737,8 @@ if __name__ == '__main__':
       num = int(data.runway[2:4])
       side = data.runway[4]
       op_num = (num+18)%36
+      if op_num == 0:
+        op_num = 36
       if side == "L":
         op_side = "R"
       elif side == "R":
@@ -669,10 +774,9 @@ if __name__ == '__main__':
       points = maptools.build_runway(arrival_end, departure_end, data.width, data.bearing, declination)
       for p in points:
         outfile.write("{:.6f}+{:.6f}\n".format(p[0], p[1]))
-        csvfile.write("{},{:.6f},{:.6f}\n".format(name, p[0], p[1]))
       outfile.write("-1\n")
   outfile.close()
-  csvfile.close()
+
 
   
   # write out the airspace
