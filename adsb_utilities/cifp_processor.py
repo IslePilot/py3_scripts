@@ -498,6 +498,82 @@ class WaypointsOut:
     
     return
 
+class ShapesOut:
+  
+  OUTCOLOR_RED = 0
+  OUTCOLOR_ORANGE = 1
+  OUTCOLOR_YELLOW = 2
+  OUTCOLOR_GREEN = 3
+  OUTCOLOR_AQUA = 4
+  OUTCOLOR_BLUE = 5
+  OUTCOLOR_MAGENTA = 6
+  OUTCOLOR_WHITE = 7
+  OUTCOLOR_GRAY = 8
+  
+  def __init__(self, path, filename, folder_name):
+    # open and configure the kml file
+    self.kml_filename = path + '\\' + filename + '.kml'
+    self.configure_kml(folder_name)
+    
+    # open the outfile
+    self.outfile = open(path + '\\' + filename + '.out', 'w')
+    
+    # instance necessary variables
+    self.folders = {}
+    
+    return
+  
+  def save_files(self):
+    # save the kml file
+    self.kml.save(self.kml_filename)
+    
+    # finish the outfile
+    self.outfile.close()
+    
+    return
+  
+  def configure_kml(self, folder_name):
+    # create the kml document
+    self.kml = simplekml.Kml()
+    
+    # create the top level folder
+    self.kml.document.name = folder_name
+    
+    return
+  
+  def add_shape(self, airport, feature, note, shape, kmlcolor=simplekml.Color.blue, outcolor=OUTCOLOR_BLUE):
+    """
+    airport: airport id (i.e. KDEN)
+    feature: feature type (i.e. Class B)
+    note: note or sequence (i.e. 22)
+    
+    """
+    # get or build the kml folder
+    if airport not in self.folders:
+      self.folders[airport] = self.kml.newfolder(name=airport)
+    folder = self.folders[airport]
+    
+    # prepare the outfile
+    self.outfile.write("{{{}_{}_{}}}\n".format(airport, feature, note))
+    self.outfile.write("$TYPE={}\n".format(outcolor))
+    
+    # get the coordinates in the kml format
+    coords = []
+    for point in shape:
+      coords.append((point[1], point[0]))
+      self.outfile.write("{:.6f}+{:.6f}\n".format(point[0], point[1]))
+    
+    # add the shape
+    line = folder.newlinestring(name="{} {}".format(feature, note),
+                                coords=coords,
+                                altitudemode=simplekml.AltitudeMode.clamptoground)
+    line.style.linestyle.width = 2
+    line.style.linestyle.color = kmlcolor
+    
+    # finish the outfile shape
+    self.outfile.write("-1\n")
+    
+    return
   
 if __name__ == '__main__':
   # when this file is run directly, run this code
@@ -512,16 +588,16 @@ if __name__ == '__main__':
   cifp = CIFPReader(lat_min, lat_max, lon_min, lon_max)
   
   location_out = WaypointsOut(r"C:\Data\CIFP\CIFP_200521\Processed", "CIFP_200521_Locations", "Locations")
+  runways_out = ShapesOut(r"C:\Data\CIFP\CIFP_200521\Processed", "CIFP_200521_Runways", "Runways")
+  airspace_out = ShapesOut(r"C:\Data\CIFP\CIFP_200521\Processed", "CIFP_200521_Airspace", "Airspace")
   
   vhf_navaids = {}
   ndbs = {}
   airports = {}
   waypoints = {}
   runways = {}
-  uc_airspace = {}
   
   first_uc = True
-  uc_id = ""
   
   with open(r"C:\Data\CIFP\CIFP_200521\FAACIFP18", "r") as f:
     seen = []
@@ -611,12 +687,15 @@ if __name__ == '__main__':
         # is this even in our ROI?
         if cifp.in_roi(data.arc_origin_latitude, data.arc_origin_longitude) or cifp.in_roi(data.latitude, data.longitude):
           if first_uc:
-            uc_id = data.airspace_center+'_Class_'+data.airspace_classification+'_part'+data.multiple_code
             if data.boundary_via == "CE":
               # this is a complete shape for this airport, save and reset
-              uc_airspace[uc_id] = maptools.circle((data.arc_origin_latitude, data.arc_origin_longitude), data.arc_distance)
-              first_uc = True
-              uc_id = ''
+              shape = maptools.circle((data.arc_origin_latitude, data.arc_origin_longitude), data.arc_distance)
+              airspace_out.add_shape(data.airspace_center, 
+                                     "Class {}".format(data.airspace_classification), 
+                                     "Sequence {}".format(data.multiple_code), 
+                                     shape, 
+                                     simplekml.Color.blue, 
+                                     ShapesOut.OUTCOLOR_MAGENTA)
             else:
               # save this point and continue
               uc_current = [data]
@@ -671,10 +750,17 @@ if __name__ == '__main__':
                   print("Unrecognized boundary via")
                   print(data)
               
-              # add the shape 
-              uc_airspace[uc_id] = shape
+              # add the data to the files
+              airspace_out.add_shape(data.airspace_center, 
+                                     "Class {}".format(data.airspace_classification), 
+                                     "Sequence {}".format(data.multiple_code), 
+                                     shape, 
+                                     simplekml.Color.blue, 
+                                     ShapesOut.OUTCOLOR_MAGENTA)
+              
+              # reset
               first_uc = True
-              uc_id = ''
+              
                  
       # ER Enroute Airways 3.2.3.4
       # SCANER       A1          0150BBGVPPAEA0E    O                         312104802987 05200                                   024982002
@@ -718,6 +804,8 @@ if __name__ == '__main__':
    
   # save the location files
   location_out.save_files()
+  airspace_out.save_files()
+  runways_out.save_files()
 
   
   # write out the Runways
@@ -779,23 +867,7 @@ if __name__ == '__main__':
 
 
   
-  # write out the airspace
-  outfile = open(r"C:\Data\CIFP\CIFP_200521\Processed\Airspace.csv", 'w')
-  outfile.write("latitude,longitude,notes\n")
-  for ident, shape in uc_airspace.items():
-    for point in shape:
-      outfile.write("{:.6f},{:.6f},{}\n".format(point[0], point[1], ident))
-  outfile.close()
 
-  
-  outfile = open("C:\Data\CIFP\CIFP_200521\Processed\Airspace.out", "w")
-  for ident, shape in uc_airspace.items():
-    outfile.write("{{{}}}\n".format(ident))
-    outfile.write("$TYPE=6\n")
-    for point in shape:
-      outfile.write("{:.6f}+{:.6f}\n".format(point[0], point[1]))
-    outfile.write("-1\n")
-  outfile.close()
 
   print("Done.")
   
