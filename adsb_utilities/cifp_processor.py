@@ -29,7 +29,6 @@ sys.path.append("..")
 import __common.maptools as maptools
 
 from collections import namedtuple
-import utm
 import simplekml
 import gpxpy
     
@@ -541,11 +540,11 @@ class ShapesOut:
     
     return
   
-  def add_shape(self, airport, feature, note, shape, kmlcolor=simplekml.Color.blue, outcolor=OUTCOLOR_BLUE):
+  def add_shape(self, airport, feature, description, shape, kmlcolor=simplekml.Color.blue, outcolor=OUTCOLOR_BLUE):
     """
     airport: airport id (i.e. KDEN)
-    feature: feature type (i.e. Class B)
-    note: note or sequence (i.e. 22)
+    feature: feature type (i.e. Class B Sequence A)
+    description: note (i.e. Runway Length:9000 feet...)
     
     """
     # get or build the kml folder
@@ -554,7 +553,7 @@ class ShapesOut:
     folder = self.folders[airport]
     
     # prepare the outfile
-    self.outfile.write("{{{}_{}_{}}}\n".format(airport, feature, note))
+    self.outfile.write("{{{}_{}}}\n".format(airport, feature))
     self.outfile.write("$TYPE={}\n".format(outcolor))
     
     # get the coordinates in the kml format
@@ -564,9 +563,10 @@ class ShapesOut:
       self.outfile.write("{:.6f}+{:.6f}\n".format(point[0], point[1]))
     
     # add the shape
-    line = folder.newlinestring(name="{} {}".format(feature, note),
+    line = folder.newlinestring(name="{}".format(feature),
                                 coords=coords,
-                                altitudemode=simplekml.AltitudeMode.clamptoground)
+                                altitudemode=simplekml.AltitudeMode.clamptoground,
+                                description=description)
     line.style.linestyle.width = 2
     line.style.linestyle.color = kmlcolor
     
@@ -575,6 +575,91 @@ class ShapesOut:
     
     return
   
+class RunwayProcessor:
+  def __init__(self, runway_writer):
+    """
+    runway_writer: instance of ShapesOut class for writing the runway shapes
+    """
+    self.runway_writer=runway_writer
+    
+    self.done = []
+    
+    return
+    
+  def process_runway(self, runways, airports):
+    """
+    runways: dictionary of RUNWAY namedtuples (airport, runway, length, bearing, latitude, longitude, elevation, dthreshold, tch, width)
+    airports: dictionary of AIRPORT namedtuples (icao_code, latitude, longitude, declination, elevation, name)
+    
+    """
+    for name, data in runways.items():
+         
+      # check if this is a real runway number (not something like N or S, but something like 36 or 18)
+      if len(data.runway.rstrip()) < 4:
+        print("process_runway: skipping {}".format(name))
+        continue
+      
+      # if we already handled this runway (probably from the other side) we are already done
+      if name in self.done:
+        continue 
+      
+      # build the opposite runway name
+      num = int(data.runway[2:4])  # numbers only 29, 07, etc.
+      side = data.runway[4]  # space, L, R, or C
+      op_num = (num+18)%36
+      # if 36 was the answer the above changed it to 0
+      if op_num == 0:
+        op_num = 36
+      if side == "L":
+        op_side = "R"
+      elif side == "R":
+        op_side = "L"
+      else:
+        op_side = side  # space and C stay the same
+      op_runway = "RW{:02d}{}".format(op_num, op_side)
+      op_name = "{}_{}".format(data.airport, op_runway)
+    
+      # save both of these in to our list so we don't create a duplicate
+      self.done.append(name)
+      self.done.append(op_name)
+      
+      # find the opposite end data
+      if op_name in runways:
+        op_data = runways[op_name]
+      else:
+        print("{} not found in runways[], skipping runway".format(op_name))
+        continue
+      
+      # get the runway points
+      arrival_end = (data.latitude, data.longitude)
+      departure_end = (op_data.latitude, op_data.longitude)
+      
+      # get the declination
+      if data.airport in airports:
+        declination = airports[data.airport].declination
+      else:
+        print("{} not found in airports[], skipping runway".format(data.airport))
+        continue
+      
+      # build the description
+      # airport, runway, length, bearing, latitude, longitude, elevation, dthreshold, tch, width
+      description = ""
+      description += "Name:{} {}\n".format(data.airport, data.runway)
+      description += "Length:{:.0f} feet\n".format(data.length)
+      description += "Elevation:{} feet\n".format(data.elevation)
+      description += "Runway Heading (mag):{:.1f} degrees\n".format(data.bearing)
+      description += "Ruway Width:{:.0f} feet\n".format(data.width)
+      description += "Threshold Crossover Height:{} feet\n".format(data.tch)
+      description += "Displaced Threshold Distance:{} feet\n".format(data.dthreshold)
+      
+      shape = maptools.build_runway(arrival_end, departure_end, data.width, data.bearing, declination)
+      
+      self.runway_writer.add_shape(data.airport, data.runway, description, shape, simplekml.Color.yellow, ShapesOut.OUTCOLOR_YELLOW)
+      
+    return
+      
+
+
 if __name__ == '__main__':
   # when this file is run directly, run this code
   print(VERSION)
@@ -588,8 +673,10 @@ if __name__ == '__main__':
   cifp = CIFPReader(lat_min, lat_max, lon_min, lon_max)
   
   location_out = WaypointsOut(r"C:\Data\CIFP\CIFP_200521\Processed", "CIFP_200521_Locations", "Locations")
-  runways_out = ShapesOut(r"C:\Data\CIFP\CIFP_200521\Processed", "CIFP_200521_Runways", "Runways")
   airspace_out = ShapesOut(r"C:\Data\CIFP\CIFP_200521\Processed", "CIFP_200521_Airspace", "Airspace")
+  runways_out = ShapesOut(r"C:\Data\CIFP\CIFP_200521\Processed", "CIFP_200521_Runways", "Runways")
+  
+  runway_processor = RunwayProcessor(runways_out)
   
   vhf_navaids = {}
   ndbs = {}
@@ -691,8 +778,8 @@ if __name__ == '__main__':
               # this is a complete shape for this airport, save and reset
               shape = maptools.circle((data.arc_origin_latitude, data.arc_origin_longitude), data.arc_distance)
               airspace_out.add_shape(data.airspace_center, 
-                                     "Class {}".format(data.airspace_classification), 
-                                     "Sequence {}".format(data.multiple_code), 
+                                     "Class {} Sequence {}".format(data.airspace_classification, data.multiple_code), 
+                                     "", 
                                      shape, 
                                      simplekml.Color.blue, 
                                      ShapesOut.OUTCOLOR_MAGENTA)
@@ -752,8 +839,8 @@ if __name__ == '__main__':
               
               # add the data to the files
               airspace_out.add_shape(data.airspace_center, 
-                                     "Class {}".format(data.airspace_classification), 
-                                     "Sequence {}".format(data.multiple_code), 
+                                     "Class {} Sequence {}".format(data.airspace_classification, data.multiple_code), 
+                                     "", 
                                      shape, 
                                      simplekml.Color.blue, 
                                      ShapesOut.OUTCOLOR_MAGENTA)
@@ -801,74 +888,14 @@ if __name__ == '__main__':
       # HF Heliport Approaches 3.3.7
       # SUSAH 87N K6FR190  ACCC   010CCC  K6D 0V       IF                                             18000                 B JH   721691505
 
+  # process the runways
+  runway_processor.process_runway(runways, airports)
    
   # save the location files
   location_out.save_files()
   airspace_out.save_files()
   runways_out.save_files()
-
   
-  # write out the Runways
-  # kml
-  # out
-  done = []
-  outfile = open(r"C:\Data\CIFP\CIFP_200521\Processed\Runways.out", 'w')
-  for name, data in runways.items():
-    # is this a real runway number?
-    if len(data.runway.rstrip()) < 4:
-      print("Skipping {}".format(name))
-      continue
-    
-    # if we haven't done this runway, build it
-    if name not in done:    
-      # find the opposite runway name
-      num = int(data.runway[2:4])
-      side = data.runway[4]
-      op_num = (num+18)%36
-      if op_num == 0:
-        op_num = 36
-      if side == "L":
-        op_side = "R"
-      elif side == "R":
-        op_side = "L"
-      else:
-        op_side = side
-      op_runway = "RW{:02d}{}".format(op_num, op_side)
-      op_name = data.airport+'_'+op_runway
-      
-      # add both names to our list so we don't do them again
-      done.append(name)
-      done.append(op_name)
-      
-      # find the opposite end
-      if op_name in runways:
-        op_data = runways[op_name]
-      else:
-        print("{} not found in runways[]".format(op_name))
-        continue
-      
-      # get our runway points
-      arrival_end = (data.latitude, data.longitude)
-      departure_end = (op_data.latitude, op_data.longitude)
-      
-      if data.airport in airports:
-        declination = airports[data.airport].declination
-      else:
-        print("{} not found in airports[]".format(data.airport))
-        continue
-      
-      outfile.write("{{{}_{}}}\n".format(data.airport, data.runway))
-      outfile.write("$TYPE=2\n")
-      points = maptools.build_runway(arrival_end, departure_end, data.width, data.bearing, declination)
-      for p in points:
-        outfile.write("{:.6f}+{:.6f}\n".format(p[0], p[1]))
-      outfile.write("-1\n")
-  outfile.close()
-
-
-  
-
-
   print("Done.")
   
       
