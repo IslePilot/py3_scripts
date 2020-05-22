@@ -60,7 +60,7 @@ def circle(origin, radius_nm):
 
   return arclist
   
-def arc_path(arc_begin, arc_end, arc_center, radius_nm, clockwise):
+def arc_path(arc_begin, arc_end, arc_center, radius_nm, clockwise, name):
   """build a list of lat.lon coordinates defining points along an arc
   
   arc_begin: tuple defining the starting point (lat, lon) in decimal degrees,+N, +E
@@ -70,13 +70,15 @@ def arc_path(arc_begin, arc_end, arc_center, radius_nm, clockwise):
   clockwise: bool defining arc direction
   """
   # convert our points
-  begin = utm.from_latlon(*arc_begin)
-  end = utm.from_latlon(*arc_end)
   center = utm.from_latlon(*arc_center)
-  radius = 1852.0 * radius_nm
-  
   utm_zone = center[2]
   utm_letter = center[3]
+  
+  # use the zone from the center and force the points to be the same
+  begin = utm.from_latlon(*arc_begin, utm_zone, utm_letter)
+  end = utm.from_latlon(*arc_end, utm_zone, utm_letter)
+  
+  radius = 1852.0 * radius_nm
   
   # find the azimuth angles to the points
   bearing1 = get_azimuth(center, begin)
@@ -84,8 +86,8 @@ def arc_path(arc_begin, arc_end, arc_center, radius_nm, clockwise):
   radius1 = get_distance(center, begin)
   radius2 = get_distance(center, end)
   
-  if abs(radius-radius1) > 200 or abs(radius-radius2) > 200:
-    print("Warning specified radius is more than 200 meters different than computed radius: begin:{:.2f} end:{:.2f}".format(radius-radius1, radius-radius2))
+  if abs(radius-radius1) > 250 or abs(radius-radius2) > 250:
+    print("Warning specified radius is more than 250 meters different than computed radius: begin:{:.2f} end:{:.2f}: {}".format(radius-radius1, radius-radius2, name))
 
   
   # find the azimuth we need to sweep through

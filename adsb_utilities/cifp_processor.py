@@ -30,7 +30,7 @@ import __common.maptools as maptools
 
 from collections import namedtuple
 import simplekml
-import gpxpy
+#import gpxpy
     
 class CIFPReader:
   SECTIONS = namedtuple('SECTIONS', 'area_code, section_code, subsection_code')
@@ -41,10 +41,14 @@ class CIFPReader:
   AIRPORT = namedtuple('AIRPORT', 'icao_code, latitude, longitude, declination, elevation, name')
   RUNWAY = namedtuple('RUNWAY', 'airport, runway, length, bearing, latitude, longitude, elevation, dthreshold, tch, width')
   
-  UC_DATA = namedtuple('UC_Data', 'airspace_type, airspace_center, airspace_classification,'\
+  UC_DATA = namedtuple('UC_DATA', 'airspace_type, airspace_center, airspace_classification,'\
                        ' multiple_code, sequence_number,'\
                        ' continuation_record_number, boundary_via, latitude, longitude,'\
                        ' arc_origin_latitude, arc_origin_longitude, arc_distance, arc_bearing, name')
+  
+  UR_DATA = namedtuple('UR_DATA', 'airspace_type, designation, multiple_code, sequence_number,'\
+                       ' boundary_via, latitude, longitude, arc_origin_latitude, arc_origin_longitude,'\
+                       ' arc_distance, arc_bearing, name')
   
   
   def __init__(self, lat_min, lat_max, lon_min, lon_max):
@@ -53,6 +57,8 @@ class CIFPReader:
     self.lon_min = lon_min
     self.lon_max = lon_max
     
+    self.ur_continuation_count = 0
+    self.controlling_agency = ""
     
     return
   
@@ -107,7 +113,7 @@ class CIFPReader:
   
   @staticmethod
   def parse_controlled_airspace(record):
-    """parse a controlled airport record (UC)
+    """parse a controlled airport record (UR)
     
     Types: A: Class C
            R: TRSA
@@ -169,6 +175,71 @@ class CIFPReader:
     return CIFPReader.UC_DATA(airspace_type, airspace_center, airspace_classification, multiple_code, 
                               sequence_number, continuation_record_number, boundary_via, latitude, longitude, 
                               arc_origin_latitude, arc_origin_longitude, arc_distance, arc_bearing, name)
+  
+  def parse_restricted_airspace(self, record):
+    """parse a controlled airport record (UR)
+    
+    Types: A: Alert
+           C: Caution
+           D: Danger
+           M: Military Operations Area (MOA)
+           P: Prohibited
+           R: Restricted
+           T: Training
+           W: Warning
+           U: Unspecified
+    
+    Boundary Via: A: Arc by edge
+                  C: Full circle
+                  G: Great circle
+                  H: Rhumb line
+                  L: CCW Arc
+                  R: CW Arc"""
+    # SUSAURK2MCOUGAR H  A00101L    G N38533000W103000000                              11000M17999MCOUGAR HIGH MOA               580281703
+    # SUSAURK2MCOUGAR H  A00102C                                                                         FAA DENVER ARTCC        580291703
+    # SUSAURK2MCOUGAR H  A00200L    G N39071900W102144300                                                                        580301703
+    # SUSAURK2MCOUGAR H  A00300L    G N39014000W101000000                                                                        580311703
+    # SUSAURK2MCOUGAR H  A00400L    G N38381000W101000000                                                                        580321703
+    # SUSAURK2MCOUGAR H  A00500L    H N38233000W102120400                                                                        580331703
+    # SUSAURK2MCOUGAR H  A00600L    G N38233000W102443400                                                                        580341703
+    # SUSAURK2MCOUGAR H  A00700L    GEN38344100W103000000                                                                        580351703
+    # 123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012
+    #          1         2         3         4         5         6         7         8         9         10        11        12        13
+    if self.ur_continuation_count > 0:
+      # process the continuation record
+      if record[25] == "C": # controlling agency record
+        self.controlling_agency = record[99:123].rstrip()
+      else:
+        print("Unhandled UR Continuation record: {}".format(record))
+      # reduce the count
+      self.ur_continuation_count -= 1
+      # return nothing
+      return None
+      
+    airspace_type = record[8]
+    designation = record[9:19].rstrip()
+    multiple_code = record[19]
+    sequence_number = int(record[20:24])
+    boundary_via = record[30:32]
+    latitude = CIFPReader.parse_lat(record[32:41])
+    longitude = CIFPReader.parse_lon(record[41:51])
+    arc_origin_latitude = CIFPReader.parse_lat(record[51:60])
+    arc_origin_longitude = CIFPReader.parse_lon(record[60:70])
+    arc_distance = CIFPReader.parse_float(record[70:74], 10.0)
+    arc_bearing = CIFPReader.parse_float(record[74:78], 10.0)
+    name = record[93:123].rstrip()
+    
+    continuation_record_number = CIFPReader.parse_int(record[24])
+    self.ur_continuation_count = continuation_record_number
+    
+    return CIFPReader.UR_DATA(airspace_type, designation, multiple_code, sequence_number, boundary_via, latitude, longitude, 
+                              arc_origin_latitude, arc_origin_longitude, arc_distance, arc_bearing, name)
+
+  def get_controlling_agency(self):
+    return self.controlling_agency
+  def reset_controlling_agency(self):
+    self.controlling_agency = ""
+    return
   
   @staticmethod
   def parse_vhf_navaid(record):
@@ -392,7 +463,6 @@ class CIFPReader:
 
 
 # define a version for this file
-VERSION = "1.0"
 
 class WaypointsOut:
   def __init__(self, path, filename, folder_name):
@@ -658,22 +728,23 @@ class RunwayProcessor:
       
     return
       
-
+VERSION = "1.0"
 
 if __name__ == '__main__':
   # when this file is run directly, run this code
   print(VERSION)
   
   # define the area of interest
-  lat_min = 36.0
-  lat_max = 44.5
-  lon_min = -110.0
-  lon_max = -98.0
+  lat_min = -90.0 # 35.5
+  lat_max = 90.0 # 44.5
+  lon_min = -180.0 # -110.0
+  lon_max = 180.0 # -98.0
   
   cifp = CIFPReader(lat_min, lat_max, lon_min, lon_max)
   
   location_out = WaypointsOut(r"C:\Data\CIFP\CIFP_200521\Processed", "CIFP_200521_Locations", "Locations")
   airspace_out = ShapesOut(r"C:\Data\CIFP\CIFP_200521\Processed", "CIFP_200521_Airspace", "Airspace")
+  restricted_out = ShapesOut(r"C:\Data\CIFP\CIFP_200521\Processed", "CIFP_200521_URAirspace", "Restricted")
   runways_out = ShapesOut(r"C:\Data\CIFP\CIFP_200521\Processed", "CIFP_200521_Runways", "Runways")
   
   runway_processor = RunwayProcessor(runways_out)
@@ -685,6 +756,7 @@ if __name__ == '__main__':
   runways = {}
   
   first_uc = True
+  first_ur = True
   
   with open(r"C:\Data\CIFP\CIFP_200521\FAACIFP18", "r") as f:
     seen = []
@@ -772,7 +844,7 @@ if __name__ == '__main__':
       if info.section_code == "U" and info.subsection_code == "C":
         data = CIFPReader.parse_controlled_airspace(line)
         # is this even in our ROI?
-        if cifp.in_roi(data.arc_origin_latitude, data.arc_origin_longitude) or cifp.in_roi(data.latitude, data.longitude):
+        if cifp.in_roi(data.arc_origin_latitude, data.arc_origin_longitude) or cifp.in_roi(data.latitude, data.longitude) or first_uc == False:
           if first_uc:
             if data.boundary_via == "CE":
               # this is a complete shape for this airport, save and reset
@@ -830,7 +902,7 @@ if __name__ == '__main__':
                     clockwise = True
                   else:
                     clockwise = False
-                  arc = maptools.arc_path(arc_begin, arc_end, arc_center, radius_nm, clockwise)
+                  arc = maptools.arc_path(arc_begin, arc_end, arc_center, radius_nm, clockwise, uc_current[i].airspace_center)
                   for p in arc:
                     shape.append(p)
                 else:
@@ -847,7 +919,101 @@ if __name__ == '__main__':
               
               # reset
               first_uc = True
+      
+      # UR Restrictive Airspace 3.2.6.1
+      # airspace_type, designation, multiple_code, sequence_number, boundary_via, latitude, longitude, 
+      # arc_origin_latitude, arc_origin_longitude, arc_distance, arc_bearing, name
+                              
+      if info.section_code == "U" and info.subsection_code == "R":
+        data = cifp.parse_restricted_airspace(line)
+        if data != None:
+          if cifp.in_roi(data.arc_origin_latitude, data.arc_origin_longitude) or cifp.in_roi(data.latitude, data.longitude) or first_ur == False:
+            if first_ur:
+              # clear the agency name because we don't have it yet
+              cifp.reset_controlling_agency()
               
+              if data.boundary_via == "CE":
+                # this is a complete shape for this airport, save and reset
+                shape = maptools.circle((data.arc_origin_latitude, data.arc_origin_longitude), data.arc_distance)
+                restricted_out.add_shape(data.designation, 
+                                         "Type {} Sequence {}".format(data.airspace_type, data.multiple_code), 
+                                         "", 
+                                         shape, 
+                                         simplekml.Color.magenta, 
+                                         ShapesOut.OUTCOLOR_ORANGE)
+              else:
+                # save this point and continue
+                ur_current = [data]
+                first_ur = False
+            else:
+              # add the point to our list
+              ur_current.append(data)
+              
+              # is this the last point in the shape?
+              last = data.boundary_via[1] == "E"
+              if last:
+                # process this shape, begin with the first point
+                shape = [(ur_current[0].latitude, ur_current[0].longitude)]
+                for i in range(len(ur_current)):
+                  if ur_current[i].boundary_via[0] == "A":
+                    # arc by edge
+                    print("Arc by edge not yet supported")
+                  elif ur_current[i].boundary_via[0] == "C":
+                    # circle
+                    print("Circle should have been supported above: {}".format(ur_current[i]))
+                    
+                  elif ur_current[i].boundary_via[0] == "G":
+                    # great circle
+                    # simply add the next point
+                    if ur_current[i].boundary_via[1] == 'E':
+                      shape.append((ur_current[0].latitude, ur_current[0].longitude))
+                    else:
+                      shape.append((ur_current[i+1].latitude, ur_current[i+1].longitude))
+                  elif ur_current[i].boundary_via[0] == "H":
+                    # rhumb line
+                    # treat this like a great circle and warn
+                    #print("Caution: Treating Rhumb Line path as a Great Circle: {}".format(ur_current[i].designation))
+                    # simply add the next point
+                    if ur_current[i].boundary_via[1] == 'E':
+                      shape.append((ur_current[0].latitude, ur_current[0].longitude))
+                    else:
+                      shape.append((ur_current[i+1].latitude, ur_current[i+1].longitude))
+                  elif ur_current[i].boundary_via[0] == "L" or ur_current[i].boundary_via[0] == "R":
+                    # CCW arc
+                    arc_begin = (ur_current[i].latitude, ur_current[i].longitude)
+                    
+                    if ur_current[i].boundary_via[1] == 'E':
+                      arc_end = (ur_current[0].latitude, ur_current[0].longitude)
+                    else:
+                      arc_end = (ur_current[i+1].latitude, ur_current[i+1].longitude)
+                      
+                    arc_center = (ur_current[i].arc_origin_latitude, ur_current[i].arc_origin_longitude)
+                    
+                    radius_nm = ur_current[i].arc_distance
+                    
+                    if ur_current[i].boundary_via[0] == "R":
+                      clockwise = True
+                    else:
+                      clockwise = False
+                    arc = maptools.arc_path(arc_begin, arc_end, arc_center, radius_nm, clockwise,
+                                            "{} {}".format(ur_current[i].designation, ur_current[i].sequence_number))
+                    for p in arc:
+                      shape.append(p)
+                  else:
+                    print("UR Unrecognized boundary via")
+                    print(data)
+                
+                # add the data to the files
+                restricted_out.add_shape(data.designation, 
+                                         "Type {} Sequence {}".format(data.airspace_type, data.multiple_code), 
+                                         "{}".format(cifp.get_controlling_agency()), 
+                                         shape, 
+                                         simplekml.Color.magenta, 
+                                         ShapesOut.OUTCOLOR_ORANGE)
+                
+                # reset
+                first_ur = True
+
                  
       # ER Enroute Airways 3.2.3.4
       # SCANER       A1          0150BBGVPPAEA0E    O                         312104802987 05200                                   024982002
@@ -874,8 +1040,7 @@ if __name__ == '__main__':
       # UC Controlled Airspace 3.2.6.3
       # SUSAUCK1ACYVR PAC  A00100     G N49000000W123192000                              02500M12500MVANCOUVER                     442391703
       
-      # UR Restrictive Airspace 3.2.6.1
-      # SUSAURK1A680       A00100L    CE                   N48105900W1223805000030       GND  A03000MA-680                         553831703
+
       
       # No need to process
       
@@ -894,6 +1059,7 @@ if __name__ == '__main__':
   # save the location files
   location_out.save_files()
   airspace_out.save_files()
+  restricted_out.save_files()
   runways_out.save_files()
   
   print("Done.")
