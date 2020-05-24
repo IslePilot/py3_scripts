@@ -32,15 +32,88 @@ from collections import namedtuple
 import simplekml
 #import gpxpy
     
+
+class Airport:
+  def __init__(self):
+    # initialize holders
+    self.runways = {}
+    self.ndbs = {}
+    self.waypoints = {}
+    self.airport = None
+    return 
+  
+  def add_waypoint(self, point):
+    self.waypoints[point.ident] = point
+    return
+  
+  def add_ndb(self, point):
+    self.ndbs[point.ident] = point
+    return
+  
+  def add_runway(self, point):
+    self.runways[point.name] = point
+    return
+  
+  def add_reference_point(self, point):
+    self.airport = point
+    return
+
+class Point:
+  """Points are locations in 3D space and include VORs, NDBs, Waypoints, 
+  runway locations, and airport locations"""
+  POINT_VOR = 0
+  POINT_VORDME = 1
+  POINT_VORTAC = 2
+  POINT_NDB = 3
+  POINT_TERMINAL_NDB = 4
+  POINT_ENROUTE_WAYPOINT = 5
+  POINT_TERMINAL_WAYPOINT = 6
+  POINT_AIRPORT = 7
+  POINT_RUNWAY = 8
+  
+  def __init__(self, ident, name, style, latitude, longitude, 
+               declination=None, frequency=None, elevation_ft=None, 
+               length_ft=None, bearing=None, tch_ft=None, width_ft=None, 
+               dthreshold_ft=None, airport=None):
+    """Create a point instance
+    
+    ident: Identifier for the point (DEN, FN, TOMSN, KBJC)
+    name: Expanded name of the point (Denver, COLLN, TOMSN, Rocky Mountain Metropolitan)
+    style: Type of waypoint (POINT_VOR, etc.)
+    latitude: WGS84 latitude (decimal degrees, northern hemisphere positive)
+    longitude: WGS84 longitude (decimal degrees, eastern hemisphere positive)
+    declination: [optional] magnetic variation at the point, or the alignment of the navaid
+    frequency: [optional] radio frequency of the navaid (VOR in MHz, NDB in kHz)
+    elevation_ft: [optional] elevation in feet above sea level
+    length_ft: [optional] runway length in feet
+    bearing: [optional] runway magnetic alignment
+    tch_ft: [optional] threshold crossover height in feet
+    width_ft: [optional] runway width in feet
+    dthreshold_ft: [optional] displaced threshold distance in feet
+    airport: [optional] airport name if this point is associated with an airport
+    """
+    self.ident = ident
+    self.name = name
+    self.style = style
+    self.latitude = latitude
+    self.longitude = longitude
+    self.declination = declination
+    self.frequency = frequency
+    self.elevation_ft = elevation_ft
+    self.length_ft = length_ft
+    self.bearing = bearing
+    self.tch_ft = tch_ft
+    self.width_ft = width_ft
+    self.dthreshold_ft = dthreshold_ft
+    self.airport = airport
+        
+    return
+  
+    
 class CIFPReader:
   SECTIONS = namedtuple('SECTIONS', 'area_code, section_code, subsection_code')
   
-  NAVAID = namedtuple('VHF_NAVAID', 'ident, frequency, latitude, longitude, declination, name')
-  WAYPOINT = namedtuple('WAYPOINT', 'ident, latitude, longitude, declination, name')
-  
-  AIRPORT = namedtuple('AIRPORT', 'icao_code, latitude, longitude, declination, elevation, name')
-  RUNWAY = namedtuple('RUNWAY', 'airport, runway, length, bearing, latitude, longitude, elevation, dthreshold, tch, width')
-  
+  """
   UC_DATA = namedtuple('UC_DATA', 'airspace_type, airspace_center, airspace_classification,'\
                        ' multiple_code, sequence_number,'\
                        ' continuation_record_number, boundary_via, latitude, longitude,'\
@@ -49,19 +122,196 @@ class CIFPReader:
   UR_DATA = namedtuple('UR_DATA', 'airspace_type, designation, multiple_code, sequence_number,'\
                        ' boundary_via, latitude, longitude, arc_origin_latitude, arc_origin_longitude,'\
                        ' arc_distance, arc_bearing, name')
+  """
   
-  
-  def __init__(self, lat_min, lat_max, lon_min, lon_max):
+  def __init__(self, path, cifp_version,  lat_min, lat_max, lon_min, lon_max, output=False):
+    # save the filename
+    self.filename = path+'\\'+cifp_version+'\\FAACIFP18'
+    
+    # save our boundaries
     self.lat_min = lat_min
     self.lat_max = lat_max
     self.lon_min = lon_min
     self.lon_max = lon_max
     
-    self.ur_continuation_count = 0
+    # initializations
+    self.continuation_count = 0
     self.controlling_agency = ""
     
+    # create the data dictionaries
+    self.vors = {}  # dictionary of Point instances
+    self.ndbs = {}  # dictionary of Point instances
+    self.enroute_waypoints = {} # dictionary of Point instances
+    
+    self.airports = {} # dictionary of Airport instances
+    
+    self.enroute_airways = {}
+    self.restricted_airspace = {}
+    
+    # create our output tools if requested
+    self.output = output
+    if self.output:
+      self.location_out = WaypointsOut(path+'\\'+cifp_version+'\\Processed', cifp_version)
+      #self.airspace_out = ShapesOut(path+'\\'+cifp_version+'\\Processed', cifp_version+"_Airspace", "Airspace")
+      #self.restricted_out = ShapesOut(path+'\\'+cifp_version+'\\Processed', cifp_version+"_URAirspace", "Restricted")
+      #self.runways_out = ShapesOut(path+'\\'+cifp_version+'\\Processed', cifp_version+"_Runways", "Runways")
+    
+    self.process_file()
+    
+    # save the files if requested
+    if self.output:
+      self.location_out.save_files()
+      #self.airspace_out.save_files()
+      #self.restricted_airspace.save_files()
+      #self.runways_out.save_files()
+      
     return
   
+  def process_file(self):
+    
+    with open(self.filename, "r") as f:
+      # now process each line in the file
+      for line in f:
+        # identify the type of line
+        info = self.get_record_info(line)
+        code = info.section_code + info.subsection_code
+        
+        # parse the line
+        if code == "XX":  # Header
+          continue
+        elif code == "AS":  # Grid Minimum Off Route Altitude (MORA)
+          continue
+        elif code == "D ":  # VHF Navaid
+          # 4.1.2
+          data = self.parse_vhf_navaid(line) # returns a Point
+          
+          # if we have a point we want, save it
+          if data != None and self.in_roi(data.latitude, data.longitude):
+            self.vors[data.ident] = data
+          
+            # save this point in our output
+            if self.output:
+              self.location_out.add_point(data)
+        
+        elif code == "DB":  # NDB
+          # 4.1.3
+          data = self.parse_ndb(line) # returns a Point
+          
+          # if we have a point we want, save it
+          if data != None and self.in_roi(data.latitude, data.longitude):
+            self.ndbs[data.ident] = data
+          
+            # save this point in our output
+            if self.output:
+              self.location_out.add_point(data)
+        
+        elif code == "EA":  # Waypoint
+          # 4.1.4
+          data = self.parse_waypoint(line) # returns a Point
+          
+          # if we have a point we want, save it
+          if data != None and self.in_roi(data.latitude, data.longitude):
+            self.enroute_waypoints[data.ident] = data
+          
+            # save this point in our output
+            if self.output:
+              self.location_out.add_point(data)
+        
+        elif code == "ER":  # Enroute Airway
+          continue
+        elif code == "HA":  # Heliport
+          continue
+        elif code == "HC":  # Helicopter Terminal Waypoint
+          continue
+        elif code == "HF":  # Heliport SID/STAR/Approach
+          continue
+        elif code == "HS":  # Heliport Minimum Sector Altitude
+          continue
+        elif code == "PA":  # Airport Reference Point
+          # 4.1.7
+          data = self.parse_airport_primary_record(line) # returns a Point
+          
+          # if we have a point we want, save it
+          if data != None and self.in_roi(data.latitude, data.longitude):
+            # save this data
+            if data.airport not in self.airports:
+              # create the airport if it doesn't already exist
+              self.airports[data.airport] = Airport()
+            self.airports[data.airport].add_reference_point(data)
+            
+            # save this point in our output
+            if self.output:
+              self.location_out.add_point(data)
+                
+        elif code == "PC":  # Terminal Waypoint
+          # 4.1.4
+          data = self.parse_waypoint(line) # returns a Point
+          
+          # if we have a point we want, save it
+          if data != None and self.in_roi(data.latitude, data.longitude):
+            # save this to our airport
+            if data.airport not in self.airports:
+              # create the airport if it doesn't already exist
+              self.airports[data.airport] = Airport()
+            self.airports[data.airport].add_waypoint(data)
+          
+            # save this point in our output
+            if self.output:
+              self.location_out.add_point(data)
+        
+        elif code == "PD":  # Standard Instrument Departure (SID)
+          continue
+        elif code == "PE":  # Standard Terminal Arrival (STAR)
+          continue
+        elif code == "PF":  # Instrument Approach
+          continue
+        elif code == "PG":  # Runway
+          # 4.1.10
+          data = self.parse_runway(line) # returns a Point
+          
+          # if we have a point we want, save it
+          if data != None and self.in_roi(data.latitude, data.longitude):
+            # save this to our airport
+            if data.airport not in self.airports:
+              # create the airport if it doesn't already exist
+              self.airports[data.airport] = Airport()
+            self.airports[data.airport].add_runway(data)
+            
+            # save this point in our output
+            if self.output:
+              self.location_out.add_point(data)
+         
+        elif code == "PI":  # Localizer/Glideslope
+          continue
+        elif code == "PN":  # Terminal NDB
+          # 4.1.3
+          data = self.parse_ndb(line) # returns a Point
+          
+          # if we have a point we want, save it
+          if data != None and self.in_roi(data.latitude, data.longitude):
+            # save this to our airport
+            if data.airport not in self.airports:
+              # create the airport if it doesn't already exist
+              self.airports[data.airport] = Airport()
+            self.airports[data.airport].add_ndb(data)
+          
+            # save this point in our output
+            if self.output:
+              self.location_out.add_point(data)
+        
+        elif code == "PP":  # Path Point
+          continue
+        elif code == "PS":  # Minimum Sector Altitude
+          continue
+        elif code == "UC":  # Controlled Airspace
+          continue
+        elif code == "UR":  # Restricted Airspace
+          continue
+        else:
+          print("CIFPReader.process_file: Unprocessed Record: {} {}".format(code, line))
+      
+    return
+    
   def in_roi(self, lat, lon):
     if lat == None or lon == None:
       return False
@@ -70,8 +320,7 @@ class CIFPReader:
       return True 
     return False
   
-  @staticmethod
-  def get_record_info(record):
+  def get_record_info(self, record):
     """determine the record classification information
     
     record: CIFP string
@@ -85,29 +334,96 @@ class CIFPReader:
     area_code = record[1:4]
     section_code = record[4]
     
+    # Record
+    # ID  SS SS  Same        Type
+    
+    # AS  6                  Grid Minimum Off Route Altitude (MORA)
+    # AS: S   AS       N04E150          UNKUNKUNKUNKUNKUNKUNKUNKUNKUNKUNKUNKUNKUNKUNKUNKUNKUNKUNKUNKUNKUNKUNKUNKUNKUNKUNKUNKUNKUNK   000011703
+    
+    # D   6                  VHF Navaid
+    # D : SCAND        ADK   PA011400 DUW                    ADK N51521587W176402739E0070003291     NARMOUNT MOFFETT                 002361703
+    # DB  6      (PN)        NDB Navaid
+    # DB: SCANDB       ACE   PA002770H  W N59382880W151300099                       E0170           NARKACHEMAK                      003632002
+    
+    # EA  6  13  (PC)        Waypoint
+    # EA: SCANEAENRT   AAMYY PA0    R   H N51301880E171091170                       W0010     NAR           AAMYY                    004572002
+    # ER  6                  Enroute Airways
+    # ER: SCANER       A1          0150BBGVPPAEA0E    O                         312104802987 05200                                   024982002
+    
+    # HA  13*                Heliport
+    # HA: SCANH 01AKPAA   H1   0     NARN N60062086W149264652E023000120         1800018000P    040040M PROVIDENCE SEWARD MEDICAL CENT041361703
+    # HC  13*                Helicopter Terminal Waypoint
+    # HC: SUSAH 87N K6CCRANN K60    W     N40514240W072275511                       W0136     NAR           CRANN                    721662002
+    # HF  13*    (HD, HE)    Heliport SIDS/STARS/Approach
+    # HF: SUSAH 87N K6FR190  ACCC   010CCC  K6D 0V       IF                                             18000                 B JH   721691505
+    # HS  13*                Heliport Minimum Sector Altitude (MSA)
+    # HS: SUSAH 87N K6SCRANNK6HC                0   18018001925                                                                  M   721811505
+    
+    # PA  13*                Airport
+    # PA: SCANP 00AKPAA        0     025NSN59565600W151413200E014800252         1800018000P    MNAR    LOWELL FIELD                  041982002
+    # PC  6  13  (EA)        Waypoint ********************Careful
+    # PC: SCANP PAAKPACBILNE PA0    W     N52155864W174310737                       E0053     NAR           BILNE                    049292002
+    # PD  13*     (PE, PF)   Airport SIDS/STARS/Approach
+    # PD: SCANP CYQGCYDBARII25ALL   010HUUTZK5EA0E       IF                                 + 04000     18000                        046811909
+    # PE  13*     (PD, PF)   Airport SIDS/STARS/Approach
+    # PE: SCANP CYQGCYEFOREY24BOBCT 010BOBCTK5EA0E       IF                                             18000                        047721911
+    # PF  13*     (PD, PE)   Airport SIDS/STARS/Approach
+    # PF: SCANP PAAKPAFRNV-A AHIMKI 010HIMKIPAEA0E       IF                                             18000                 B PC   049391913
+    # PG  13*                Runway
+    # PG: SCANP 01A PAGRW05    0011760463 N62562477W152162256               02034000050050D                                          042001703
+    # PI  13*                Airport & Heliport Localizer and Glideslope
+    # PI: SCANP PABEPAIIBET1   011150RW19RN60460657W1615047081925N60470649W1614945101306 08980510300E01105200106                     052091707
+    # PN  6*     (DB)        NDB Navaid
+    # PN: SLAMPNTISXTI ST    TI002410HO W N17413092W064530474                       W0130           NARPESTE                         176801605
+    # PP  13*                Path Point
+    # PP: SCANP PAAQPAPR10   RW10 001 0000W10A0N6135419550W14906023005+008180300N6135067710W14903110925106751648000400F400000FDCE99BD050001812
+    # PS  13*                Airport Minimum Sector Altitude (MSA)
+    # PS: SCANP PAAKPASMACSUPAPC                0   18018006325                                                                  M   049541310
+    
+    # UC  6                  Controlled Airspace
+    # UC: SCANUCPAAPANC PAC  A00100     G N61103600W149585900                              GND  A04100MANCHORAGE                     134421703
+    # UR  6                  Restrictive Airpsace
+    # UR: SCANURPAMBIRCH     A00101L    G N64311700W146093100                              00500A04999MBIRCH MOA                     136841703
+    
+    # Others in File
+    # XX: HDR01FAACIFP18      001P013203790892006  30-APR-202012:09:31  U.S.A. DOT FAA                                                37D006AB
+    
+    # Not in file
+    # EM  6                  Airway Markers
+    # EP  6                  Holding Pattern
+    # ET  6                  Preferred Routes
+    # EU  6                  Enroute Airways Restriction Records
+    # EV  6                  Enroute Comm
+    # HD  13*    (HE, HF)    Heliport SIDS/STARS/Approach
+    # HE  13*    (HD, HF)    Heliport SIDS/STARS/Approach
+    # HK  13*                Heliport TAA
+    # HV  13*                Heliport Comm
+    # PB  13*                Airport Gate
+    # PK  13*                Airport TAA
+    # PL  13*                Airport & Heliport MLS
+    # PM  13*                Airport & Heliport Localizer Marker/Locators
+    # PR  13*                Flight Planning Arrival/Departure
+    # PT  13*                GLS
+    # PV  13*                Airport Comm
+    # TC  6                  Cruising Tables
+    # UF  6                  FIR/UIR
+    # R   6                  Company Route
+    # RA  6                  Alternate Record
+    # TG  6                  Geographical Reference Table
     if record_type == 'S':
-      if section_code == 'D':  # NAVAID Section
-        subsection_code = record[5]
-      elif section_code == 'E': # Enroute Section
-        subsection_code = record[5]
-      elif section_code == 'P': # Airport Section
+      if section_code == "H":
+        subsection_code = record[12]
+      elif section_code == "P":
         if record[5] == " ":
           subsection_code = record[12]
         else:
           subsection_code = record[5]
-      elif section_code == 'U': # Special Use Airspace Section
-        subsection_code = record[5]
-      elif section_code == 'A': # Minimum Off Route Altitude Section
-        subsection_code = record[5]
-      elif section_code == 'H': # Heliport Section
-        subsection_code = record[12]
-      elif section_code == 'T': # Cruising Table Section
-        subsection_code = record[5]
       else:
-        print("Unexpected Section Code: {}".format(section_code))
-        subsection_code = ''
-    if record_type == 'H':
-      subsection_code = ' '
+        subsection_code = record[5]
+    elif record_type == 'H':
+      area_code = 'HDR'
+      section_code = "X"
+      subsection_code = "X"
 
     return CIFPReader.SECTIONS(area_code, section_code, subsection_code)
   
@@ -241,11 +557,8 @@ class CIFPReader:
     self.controlling_agency = ""
     return
   
-  @staticmethod
-  def parse_vhf_navaid(record):
-    """
-    """
-    # D  VHF Navaid 3.2.2.1
+  def parse_vhf_navaid(self, record):
+    """Parse a section 4.1.2 (p.27) VHF Navaid Record"""
     # SCAND        ADK   PA011400 DUW                    ADK N51521587W176402739E0070003291     NARMOUNT MOFFETT                 002361703
     # SLAMD        ANU   TA011450VDHW N17073316W061480060    N17073316W061480060W0150004002     NARV. C. BIRD                    165731707
     # SPACD        AWK   PW011350VTHW N19171169E166373840    N19171169E166373840E0060000182     NARWAKE ISLAND                   179381901
@@ -256,11 +569,23 @@ class CIFPReader:
     # 123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012
     #          1         2         3         4         5         6         7         8         9         10        11        12        13
     # make sure this isn't a continuation record
-    if record[21] == "0":
+    if record[21] == "0": # continuation record number (count)
       # first record only
-      if record[27] == "V":
+      if record[27] == "V": # 5.35 (p.88)
         # VORs only
-        ident = record[13:17].rstrip()
+        t2 = record[28]
+        if t2 == " ":
+          style = Point.POINT_VOR
+        elif t2 == "D":
+          style = Point.POINT_VORDME
+        elif t2 == "T" or t2 == "M":
+          style = Point.POINT_VORTAC
+        else:
+          print("CIFPReader.parse_vhf_navaid: Unexpected VOR type: {}".format(record))
+          style = None
+        
+        # now parse the rest of the record
+        vor_ident = record[13:17].rstrip()
         frequency = CIFPReader.parse_float(record[22:27], 100)
         latitude = CIFPReader.parse_lat(record[32:41])
         longitude = CIFPReader.parse_lon(record[41:51])
@@ -269,16 +594,19 @@ class CIFPReader:
       else:
         return None
     else:
-      print("VHF Continuation Record not handled:")
-      print(record)
+      print("CIFPReader.parse_vhf_navaid: VHF Continuation Record not handled: {}".format(record))
       return None
     
-    return CIFPReader.NAVAID(ident, frequency, latitude, longitude, declination, name)
+    return Point(ident=vor_ident,
+                 name=name,
+                 style=style,
+                 latitude=latitude,
+                 longitude=longitude,
+                 declination=declination,
+                 frequency=frequency)
   
-  @staticmethod
-  def parse_ndbs(record):
-    """
-    """
+  def parse_ndb(self, record):
+    """Parse a section 4.1.3 (p.29) NDB Record"""
     # DB NDB Navaid 3.2.2.2
     # SCANDB       ACE   PA002770H  W N59382880W151300099                       E0170           NARKACHEMAK                      003632002
     # SLAMDB       DDP   TJ003910H HW N18280580W066244461                       W0110           NARDORADO                        166011605
@@ -294,6 +622,18 @@ class CIFPReader:
     # make sure this isn't a continuation record
     if record[21] == "0":
       # first record only
+      
+      # identify the style
+      if record[4:6] == "DB":
+        style = Point.POINT_NDB
+      elif record[4:6] == "PN":
+        style = Point.POINT_TERMINAL_NDB
+      else:
+        print("CIFPReader.parse_ndb: Unexpected NDB type: {}".format(record))
+        style = None
+      
+      # parse the record
+      airport = record[6:10].rstrip()
       ident = record[13:17].rstrip()
       frequency = CIFPReader.parse_float(record[22:27], 10)
       latitude = CIFPReader.parse_lat(record[32:41])
@@ -301,16 +641,21 @@ class CIFPReader:
       declination = CIFPReader.parse_variation(record[74:79])
       name = record[93:123].rstrip()
     else:
-      print("NDB Continuation Record not handled:")
+      print("CIFPReader.parse_ndb: NDB Continuation Record not handled:")
       print(record)
       return None
     
-    return CIFPReader.NAVAID(ident, frequency, latitude, longitude, declination, name)
+    return Point(ident=ident,
+                 name=name,
+                 style=style,
+                 latitude=latitude,
+                 longitude=longitude,
+                 declination=declination,
+                 frequency=frequency,
+                 airport=airport)
   
-  @staticmethod
-  def parse_waypoint(record):
-    """
-    """
+  def parse_waypoint(self, record):
+    """Parse a section 4.1.4 (p.29) Waypoint Record"""
     # EA Enroute Waypoint 3.2.3.1
     # SCANEAENRT   AAMYY PA0    R   H N51301880E171091170                       W0010     NAR           AAMYY                    004572002
     # SEEUEAENRT   AGURA UH0    W  RH N67275200W168582400                       E0077     NAR           AGURA                    165482002
@@ -324,26 +669,44 @@ class CIFPReader:
     # SPACP PGROPGCCEPOS K20    W     N14100778E145180802                       E0006     NAR           CEPOS                    194721901
     # SSPAP NSTUNSCAPRAN NZ0    R     S14215480W170455857                       E0119     NAR           APRAN                    226592002
     # SUSAP 00R K4CAGEVE K40    W     N30373965W094562178                       E0019     NAR           AGEVE                    753642002
+    # SCANP PAAKPACBILNE PA0    W     N52155864W174310737                       E0053     NAR           BILNE                    049292002
     # 123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012
     #          1         2         3         4         5         6         7         8         9         10        11        12        13
     # make sure this isn't a continuation record
     if record[21] == "0":
       # first record only
+      
+      # identify the style
+      if record[4:6] == "EA":
+        style = Point.POINT_ENROUTE_WAYPOINT
+      elif record[4] == "P" and record[12] == "C":
+        style = Point.POINT_TERMINAL_WAYPOINT
+      else:
+        print("CIFPReader.parse_waypoint: Unexpected Waypoint type: {}".format(record))
+        style = None
+      
+      # parse the record
+      airport = record[6:10].rstrip()
       ident = record[13:18].rstrip()
       latitude = CIFPReader.parse_lat(record[32:41])
       longitude = CIFPReader.parse_lon(record[41:51])
       declination = CIFPReader.parse_variation(record[74:79])
       name = record[98:123].rstrip()
     else:
-      print("Waypoint Continuation Record not handled:")
+      print("CIFPReader.parse_waypoint: Waypoint Continuation Record not handled:")
       print(record)
       return None
     
-    return CIFPReader.WAYPOINT(ident, latitude, longitude, declination, name)
+    return Point(ident=ident,
+                 name=name,
+                 style=style,
+                 latitude=latitude,
+                 longitude=longitude,
+                 declination=declination,
+                 airport=airport)
   
-  @staticmethod
-  def parse_airport_primary_record(record):
-    """parse an airport primary record (Section 4.1.7.1)
+  def parse_airport_primary_record(self, record):
+    """parse an airport primary record (Section 4.1.7) (p.32)
     
     record: CIFP string containing a PA record
     
@@ -362,19 +725,30 @@ class CIFPReader:
     # SUSAP KDENK2ADEN     0     160YHN39514200W104402340E008005434         1800018000C    MNAR    DENVER INTL                   599261208
     # 123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012
     #          1         2         3         4         5         6         7         8         9         10        11        12        13
-    icao_code = record[6:10].rstrip()
-    latitude = CIFPReader.parse_lat(record[32:41])
-    longitude = CIFPReader.parse_lon(record[41:51])
-    declination = CIFPReader.parse_variation(record[51:56])
-    elevation = float(record[56:61])
-    name = record[93:123].rstrip()
+    if record[21] == "0":
+      # first record only
+      airport = record[6:10].rstrip()
+      latitude = CIFPReader.parse_lat(record[32:41])
+      longitude = CIFPReader.parse_lon(record[41:51])
+      declination = CIFPReader.parse_variation(record[51:56])
+      elevation_ft = float(record[56:61])
+      name = record[93:123].rstrip()
+    else:
+      print("CIFPReader.parse_airport_primary_record: Continuation Record not handled:")
+      print(record)
+      return None
     
-    return CIFPReader.AIRPORT(icao_code, latitude, longitude, declination, elevation, name)
+    return Point(ident=airport, 
+                 name=name, 
+                 style=Point.POINT_AIRPORT, 
+                 latitude=latitude, 
+                 longitude=longitude, 
+                 declination=declination, 
+                 elevation_ft=elevation_ft, 
+                 airport=airport)
   
-  @staticmethod
-  def parse_runway(record):
-    """
-    """
+  def parse_runway(self, record):
+    """Parse a section 4.1.10 (p.25) Runway Record"""
     # PG Airport Runway 3.2.4.7
     # SCANP 01A PAGRW05    0011760463 N62562477W152162256               02034000050050D                                          042001703
     # SLAMP TISTTIGRW10    0070001000 N18201272W064590034               00024000055150I                                          169431613
@@ -396,9 +770,21 @@ class CIFPReader:
       tch = CIFPReader.parse_float(record[75:77])
       width = CIFPReader.parse_float(record[77:80])
     else:
+      print("CIFPReader.parse_runway: Continuation Record not handled: {}".format(record))
       return None
-
-    return CIFPReader.RUNWAY(airport, runway, length, bearing, latitude, longitude, elevation, dthreshold, tch, width)
+    
+    return Point(ident=airport, 
+                 name=runway, 
+                 style=Point.POINT_RUNWAY, 
+                 latitude=latitude, 
+                 longitude=longitude, 
+                 elevation_ft=elevation, 
+                 length_ft=length,
+                  bearing=bearing, 
+                  tch_ft=tch, 
+                  width_ft=width, 
+                  dthreshold_ft=dthreshold, 
+                  airport=airport)
   
   @staticmethod
   def parse_float(fstr, divisor=1.0):
@@ -465,102 +851,130 @@ class CIFPReader:
 # define a version for this file
 
 class WaypointsOut:
-  def __init__(self, path, filename, folder_name):
-    self.kml_filename = path + '\\' + filename + '.kml'
-    self.gpx_filename = path + '\\' + filename + '.gpx'
+  def __init__(self, path, cifp_version):
+    # save the input
+    self.path = path
+    self.cifp_version = cifp_version
     
-    self.configure_kml(folder_name)
+    # create the kml documents
+    self.vors = simplekml.Kml()
+    self.vors.document.name = "VHF Navaids"
+    
+    self.ndbs = simplekml.Kml()
+    self.ndbs.document.name = "NDBs"
+    
+    self.enroute_waypoints = simplekml.Kml()
+    self.enroute_waypoints.document.name = "Waypoints"
+    
+    self.terminal_waypoints = simplekml.Kml()
+    self.terminal_waypoints.document.name = "Terminal Waypoints"
+    
+    self.terminal_ndbs = simplekml.Kml()
+    self.terminal_ndbs.document.name = "Terminal NDBs"
+    
+    self.airports = simplekml.Kml()
+    self.airports.document.name = "Airports"
+    
+    self.runways = simplekml.Kml()
+    self.runways.document.name = "Runways"
     
     return
   
   def save_files(self):
     # save the kml file
-    self.kml.save(self.kml_filename)
-    return
-  
-  def configure_kml(self, folder_name):
-    # create the kml document
-    self.kml = simplekml.Kml()
-    
-    # create the top level folder
-    self.kml.document.name = folder_name
-    
-    # create the folder structure
-    self.d_folder = self.kml.newfolder(name="VHF Navaids (D )")
-    self.db_folder = self.kml.newfolder(name="NDBs (DB)")
-    self.pn_folder = self.kml.newfolder(name="Terminal NDBs (PN)")
-    self.ea_folder = self.kml.newfolder(name="Enroute Waypoints (EA)")
-    self.pc_folder = self.kml.newfolder(name="Terminal Waypoints (PC)")
-    self.pa_folder = self.kml.newfolder(name="Airports (PA)")
-    self.pg_folder = self.kml.newfolder(name="Runways (PG)")
+    self.vors.save(self.path + "\\{}_VORs.kml".format(self.cifp_version))
+    self.ndbs.save(self.path + "\\{}_NDBs.kml".format(self.cifp_version))
+    self.enroute_waypoints.save(self.path + "\\{}_Waypoints.kml".format(self.cifp_version))
+    self.terminal_waypoints.save(self.path + "\\{}_TerminalWaypoints.kml".format(self.cifp_version))
+    self.terminal_ndbs.save(self.path + "\\{}_TerminalNDBs.kml".format(self.cifp_version))
+    self.airports.save(self.path + "\\{}_Airports.kml".format(self.cifp_version))
+    self.runways.save(self.path + "\\{}_Runways.kml".format(self.cifp_version))
     
     return
   
-  def add_point(self, station_type, identifier, latitude, longitude, elevation_ft=None, name=None, frequency=None, declination=None, runway=None,
-                length=None, bearing=None, width=None, dthreshold=None, tch=None):
-    # 'VHF_NAVAID', 'ident,    frequency, latitude, longitude, declination,            name'
-    # 'WAYPOINT',   'ident,               latitude, longitude, declination,            name'
-    # 'AIRPORT',    'icao_code,           latitude, longitude, declination, elevation, name'
-    # 'RUNWAY',     'airport, runway, length, bearing, latitude, longitude, elevation, dthreshold, tch, width'
+  
+  def add_point(self, point):
+    """add a point to the document
     
-    
+    point: Point instance
+    """
     # build our point with elevation if available
-    if elevation_ft != None:
+    if point.elevation_ft != None:
       # convert to meters
-      elevation = 0.3048 * elevation_ft
-      point = (longitude, latitude, elevation)
+      elevation = 0.3048 * point.elevation_ft
+      location = (point.longitude, point.latitude, elevation)
     else:
-      point = (longitude, latitude)
+      location = (point.longitude, point.latitude)
     
+    # figure out which kml document this point belongs to and configure the description
     description = ''
-    if station_type == "D ":
-      description += "Name:{}\n".format(name)
-      description += "Frequency:{:.2f} MHz\n".format(frequency)
-      description += "Declination:{:.1f} degrees\n".format(declination)
-      pnt = self.d_folder.newpoint(name=identifier, description=description, coords=[point])
-    elif station_type == "DB":
-      description += "Name:{}\n".format(name)
-      description += "Frequency:{:.0f} kHz\n".format(frequency)
-      description += "Declination:{:.1f} degrees\n".format(declination)
-      pnt = self.db_folder.newpoint(name=identifier, description=description, coords=[point])
-    elif station_type == "PN":
-      description += "Name:{}\n".format(name)
-      description += "Frequency:{:.0f} kHz\n".format(frequency)
-      description += "Declination:{:.1f} degrees\n".format(declination)
-      pnt = self.pn_folder.newpoint(name=identifier, description=description, coords=[point])
-    elif station_type == "EA":
-      description += "Name:{}\n".format(name)
-      description += "Declination:{:.1f} degrees\n".format(declination)
-      pnt = self.ea_folder.newpoint(name=identifier, description=description, coords=[point])
-    elif station_type == "PC":
-      description += "Name:{}\n".format(name)
-      description += "Declination:{:.1f} degrees\n".format(declination)
-      pnt = self.pc_folder.newpoint(name=identifier, description=description, coords=[point])
-    elif station_type == "PA":
-      description += "Name:{}\n".format(name)
-      description += "Elevation:{} feet\n".format(elevation_ft)
-      description += "Declination:{:.1f} degrees\n".format(declination)
-      pnt = self.pa_folder.newpoint(name=identifier, description=description, coords=[point])
-    elif station_type == "PG":
-      description += "Name:{} {}\n".format(identifier, runway)
-      description += "Length:{:.0f} feet\n".format(length)
-      description += "Elevation:{} feet\n".format(elevation_ft)
-      description += "Runway Heading (mag):{:.1f} degrees\n".format(bearing)
-      description += "Ruway Width:{:.0f} feet\n".format(width)
-      description += "Threshold Crossover Height:{} feet\n".format(tch)
-      description += "Displaced Threshold Distance:{} feet\n".format(dthreshold)
-      pnt = self.pg_folder.newpoint(name="{}_{}".format(identifier, runway), description=description, coords=[point])
+    identifier = point.ident
+    if point.style == Point.POINT_VOR:
+      kml_doc = self.vors
+      description += "Name:{}\n".format(point.name)
+      description += "Type: VOR\n"
+      description += "Frequency:{:.2f} MHz\n".format(point.frequency)
+      description += "Declination:{:.1f} degrees\n".format(point.declination)
+    elif point.style == Point.POINT_VORDME:
+      kml_doc = self.vors
+      description += "Name:{}\n".format(point.name)
+      description += "Type: VOR/DME\n"
+      description += "Frequency:{:.2f} MHz\n".format(point.frequency)
+      description += "Declination:{:.1f} degrees\n".format(point.declination)
+    elif point.style == Point.POINT_VORTAC:
+      kml_doc = self.vors
+      description += "Name:{}\n".format(point.name)
+      description += "Type: VORTAC\n"
+      description += "Frequency:{:.2f} MHz\n".format(point.frequency)
+      description += "Declination:{:.1f} degrees\n".format(point.declination)
+    elif point.style == Point.POINT_NDB:
+      kml_doc = self.ndbs
+      description += "Name:{}\n".format(point.name)
+      description += "Frequency:{:.0f} kHz\n".format(point.frequency)
+      description += "Declination:{:.1f} degrees\n".format(point.declination)
+    elif point.style == Point.POINT_ENROUTE_WAYPOINT:
+      kml_doc = self.enroute_waypoints
+      description += "Name:{}\n".format(point.name)
+      description += "Declination:{:.1f} degrees\n".format(point.declination)
+    elif point.style == Point.POINT_TERMINAL_WAYPOINT:
+      kml_doc = self.terminal_waypoints
+      description += "Name:{}\n".format(point.name)
+      description += "Declination:{:.1f} degrees\n".format(point.declination)
+    elif point.style == Point.POINT_TERMINAL_NDB:
+      kml_doc = self.terminal_ndbs
+      description += "Name:{}\n".format(point.name)
+      description += "Frequency:{:.0f} kHz\n".format(point.frequency)
+      description += "Declination:{:.1f} degrees\n".format(point.declination)
+    elif point.style == Point.POINT_AIRPORT:
+      kml_doc = self.airports
+      description += "Name:{}\n".format(point.name)
+      description += "Elevation:{} feet\n".format(point.elevation_ft)
+      description += "Declination:{:.1f} degrees\n".format(point.declination)
+    elif point.style == Point.POINT_RUNWAY:
+      kml_doc = self.runways
+      identifier = "{}_{}".format(point.airport, point.name)
+      description += "Length:{:.0f} feet\n".format(point.length_ft)
+      description += "Elevation:{} feet\n".format(point.elevation_ft)
+      description += "Runway Heading (mag):{:.1f} degrees\n".format(point.bearing)
+      description += "Ruway Width:{:.0f} feet\n".format(point.width_ft)
+      description += "Threshold Crossover Height:{} feet\n".format(point.tch_ft)
+      description += "Displaced Threshold Distance:{} feet\n".format(point.dthreshold_ft)
+    else:
+      print("Unknown Point Style: {}".format(point))
+    
+    # add the point
+    pnt = kml_doc.newpoint(name=identifier, description=description, coords=[location])
     
     # configure the point
-    if elevation_ft != None:
+    if point.elevation_ft != None:
       pnt.lookat = simplekml.LookAt(altitudemode=simplekml.AltitudeMode.absolute,
-                                    latitude=latitude,
-                                    longitude=longitude,
+                                    latitude=point.latitude,
+                                    longitude=point.longitude,
                                     range=15000, heading=0.0, tilt=0.0)
     else:
       pnt.lookat = simplekml.LookAt(altitudemode=simplekml.AltitudeMode.clamptoground,
-                                    latitude=latitude,
-                                    longitude=longitude,
+                                    latitude=point.latitude,
+                                    longitude=point.longitude,
                                     range=15000, heading=0.0, tilt=0.0)
     
     pnt.style.iconstyle.icon.href = "http://maps.google.com/mapfiles/kml/shapes/placemark_square.png"
@@ -740,87 +1154,20 @@ if __name__ == '__main__':
   lon_min = -180.0 # -110.0
   lon_max = 180.0 # -98.0
   
-  cifp = CIFPReader(lat_min, lat_max, lon_min, lon_max)
+  cifp = CIFPReader(r"C:\Data\CIFP", "CIFP_200521", lat_min, lat_max, lon_min, lon_max, output=True)
   
-  location_out = WaypointsOut(r"C:\Data\CIFP\CIFP_200521\Processed", "CIFP_200521_Locations", "Locations")
-  airspace_out = ShapesOut(r"C:\Data\CIFP\CIFP_200521\Processed", "CIFP_200521_Airspace", "Airspace")
-  restricted_out = ShapesOut(r"C:\Data\CIFP\CIFP_200521\Processed", "CIFP_200521_URAirspace", "Restricted")
-  runways_out = ShapesOut(r"C:\Data\CIFP\CIFP_200521\Processed", "CIFP_200521_Runways", "Runways")
-  
+  """
   runway_processor = RunwayProcessor(runways_out)
   
-  vhf_navaids = {}
-  ndbs = {}
-  airports = {}
-  waypoints = {}
-  runways = {}
-  
+
   first_uc = True
   first_ur = True
   
   with open(r"C:\Data\CIFP\CIFP_200521\FAACIFP18", "r") as f:
-    seen = []
+    seen = {}
     for line in f:
       info = CIFPReader.get_record_info(line)
-           
-      # D  VHF Navaid 3.2.2.1
-      # Process All
-      if info.section_code == "D" and info.subsection_code == " ":
-        # 'ident, frequency, latitude, longitude, declination, name'
-        data = CIFPReader.parse_vhf_navaid(line)
-        if data != None and cifp.in_roi(data.latitude, data.longitude):
-          vhf_navaids[data.ident] = data
-          location_out.add_point(station_type=info.section_code+info.subsection_code,
-                                 identifier=data.ident,
-                                 latitude=data.latitude,
-                                 longitude=data.longitude,
-                                 name=data.name,
-                                 frequency=data.frequency,
-                                 declination=data.declination)
-      
-      # DB NDB Navaid 3.2.2.2
-      # PN Airport and Heliport Terminal NDB 3.2.4.13
-      if (info.section_code == "D" and info.subsection_code == "B") or (info.section_code == "P" and info.subsection_code == "N"):
-        # 'ident, frequency, latitude, longitude, declination, name'
-        data = CIFPReader.parse_ndbs(line)
-        if data != None and cifp.in_roi(data.latitude, data.longitude):
-          ndbs[data.ident] = data
-          location_out.add_point(station_type=info.section_code+info.subsection_code,
-                                 identifier=data.ident,
-                                 latitude=data.latitude,
-                                 longitude=data.longitude,
-                                 name=data.name,
-                                 frequency=data.frequency,
-                                 declination=data.declination)
-      
-      # PA Airport Reference Points 3.2.4.1
-      if info.section_code == "P" and info.subsection_code == "A":
-        # 'icao_code, latitude, longitude, declination, elevation, name'
-        data = CIFPReader.parse_airport_primary_record(line)
-        if data != None and cifp.in_roi(data.latitude, data.longitude):
-          airports[data.icao_code] = data
-          location_out.add_point(station_type=info.section_code+info.subsection_code,
-                                 identifier=data.icao_code,
-                                 latitude=data.latitude,
-                                 longitude=data.longitude,
-                                 elevation_ft=data.elevation,
-                                 name=data.name,
-                                 declination=data.declination)
-      
-      # EA Enroute Waypoint 3.2.3.1
-      # PC Airport Terminal Waypoints 3.2.4.3
-      if (info.section_code == "E" and info.subsection_code == "A") or (info.section_code == "P" and info.subsection_code == "C"):
-        # 'ident, latitude, longitude, declination, name'
-        data = CIFPReader.parse_waypoint(line)
-        if data != None and cifp.in_roi(data.latitude, data.longitude):
-          waypoints[data.ident] = data
-          location_out.add_point(station_type=info.section_code+info.subsection_code,
-                                 identifier=data.ident,
-                                 latitude=data.latitude,
-                                 longitude=data.longitude,
-                                 name=data.name,
-                                 declination=data.declination)
-      
+            
       # PG Airport Runway 3.2.4.7
       if (info.section_code == "P" and info.subsection_code == "G"):
         # 'airport, runway, length, bearing, latitude, longitude, elevation, dthreshold, tch, width'
@@ -1014,54 +1361,12 @@ if __name__ == '__main__':
                 # reset
                 first_ur = True
 
-                 
-      # ER Enroute Airways 3.2.3.4
-      # SCANER       A1          0150BBGVPPAEA0E    O                         312104802987 05200                                   024982002
-      # SEEUER       B96         0100LARSAUHEA0E    O                         12050213     05000     18000                         165712006
-      # SLAMER       A517        0100ZPATATJEA0E    O                         34900375     06000     45000                         167211901
-      # SPACER       A216        0100MONPIP EA0E    O                         16302692     18000     60000                         188692002
-      # SUSAER       A1          0110CFMTLK1EA0E    O                         22290226     02800                                   510572002      
-      
-      # PF Airport Approaches 3.2.4.6
-      # SUSAP 00R K4FR30   ADAS   010DAS  K4D 0V       IF                                             18000                 B JS   753670804
-      
-      # PP Airport and Heliport Path Point 3.2.4.14
-      # SUSAP 02A K7PR08   RW08 001 0000W08A0N3250577430W08637041540+014950000N3251157585W08635205635106751528000000F4000001D1CE6EA754871610
-      
-      # PE Airport Standard Terminal Arrival Routes 3.2.4.5
-      # SUSAP 05C K5EGSH7  1FWA   010FWA  K5D 0V       IF                                             18000                        757471705
-      
-      # PD Airport Standard Instrument Departures 3.2.4.4
-      # SUSAP 05U K2DMINES14RW36  010         0        VA                     3580        + 06500     18000                        758611309
-      
-      # PI Airport and Heliport Localizer/Glide Slope 3.2.4.8
-      # SUSAP 3J7 K7IIVVM0   011090RW25 N33353920W0830850922491                   0370     0600   W0050                            862591209
-      
-      # UC Controlled Airspace 3.2.6.3
-      # SUSAUCK1ACYVR PAC  A00100     G N49000000W123192000                              02500M12500MVANCOUVER                     442391703
-      
-
-      
-      # No need to process
-      
-      # HA Heliport 3.3.3
-      # SUSAH 00A K6A00AH1   0     NARN N40041500W074560100W012000011         1800018000C    080080M TOTAL RF                      689881703
-      
-      # HC Heliport Terminal Waypoints 3.3.4
-      # SUSAH 87N K6CCRANN K60    W     N40514240W072275511                       W0136     NAR           CRANN                    721662002
-      
-      # HF Heliport Approaches 3.3.7
-      # SUSAH 87N K6FR190  ACCC   010CCC  K6D 0V       IF                                             18000                 B JH   721691505
-
   # process the runways
   runway_processor.process_runway(runways, airports)
    
-  # save the location files
-  location_out.save_files()
-  airspace_out.save_files()
-  restricted_out.save_files()
-  runways_out.save_files()
+
   
+  """
   print("Done.")
   
       
