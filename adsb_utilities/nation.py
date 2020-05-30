@@ -23,6 +23,8 @@ Revision History:
 
   May 25, 2020, ksb, created
 """
+import procedure as procedure
+import airspace as airspace
 
 class NationalAirspace:
   """Once populated, this class contains descriptions of the nations airports, airways, airspace, and nav stations"""
@@ -68,13 +70,30 @@ class NationalAirspace:
     self.enroute_waypoints[point.ident] = point
     return
   
+  def add_airway_fix(self, airway_fix):
+    # if we don't already have this airway, create it
+    if airway_fix.route_id not in self.enroute_airways:
+      self.enroute_airways[airway_fix.route_id] = procedure.Airway()
+    
+    # save this fix to our airway
+    self.enroute_airways[airway_fix.route_id].add_fix(airway_fix)
+    
+    return
+  
   def add_airport(self, airport):
     self.airports[airport.ident] = airport
     return
   
   def add_airspace(self, airspace_record):
-    # todo
-    return
+    # identify where this airspace record belongs
+    key = "{} Section {}".format(airspace_record.airspace_designation, airspace_record.multiple_code)
+    
+    # add this key if it doesn't already exist
+    if key not in self.restrictive_airspace:
+      self.restrictive_airspace[key] = airspace.AirspaceShape()
+    
+    # add the record
+    self.restrictive_airspace[key].add_airspace_record(airspace_record)
   
   def has_airport(self, ident):
     if ident in self.airports:

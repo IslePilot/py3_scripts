@@ -207,7 +207,10 @@ class ProcedureRecord:
     self.record = record
     
     # parse the data
-    self.parse_procedure_record()
+    if record[38] == '0' or record[38] == '1':
+      self.parse_procedure_record()
+    else:
+      self.parse_procedure_continuation_record()
     return
   
   def parse_procedure_record(self):
@@ -387,5 +390,113 @@ class ProcedureRecord:
     self.center_section = self.record[114:116]
     
     return
-
-
+  
+  def parse_procedure_continuation_record(self):
+    # SUSAP KDENK2FH16RZ H      020JETSNK2PC2W                                                A031A011                      FS   617911310
+    # SUSAP KBJCK2FR12L  R      020PYYPPK2PC2WALP        N          ALNAV                                                   JS   294951709
+    # SUSAP KBJCK2FR30L  R      020HESDAK2PC2WALPV       ALNAV/VNAV ALNAV                                                   JS   295081412
+    # SUSAP KBJCK2FR30R  R      020ALIKEK2PC2WALPV       ALNAV/VNAV ALNAV                                                   JS   295211412
+    # 123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012
+    #          1         2         3         4         5         6         7         8         9         10        11        12        13
+    # W is not in version 17 documentation...not sure what to do with it
+    if self.record[39] != "W":
+      print("ProcedureRecord: Unhandled continuation record: {}".format(self.record.rstrip()))
+    
+    return
+    
+class Airway:
+  def __init__(self):
+    # An airway is simply an ordered set of fixes defining a path
+    self.airway_fixes = []
+    self.airway = []
+  
+  def add_fix(self, airway_fix):
+    self.airway.append(airway_fix)
+    self.airway_fixes.append(airway_fix.fix_id)
+    return 
+  
+  def get_fixes(self, initial_fix, final_fix, include_end_points=True):
+    """get a list of fixes along the airway from the initial_fix to the final_fix
+    
+    initial_fix: fix identifier for the initial fix
+    final_fix: fix identifier for the final fix
+    include_end_points: [optional, default True] include the initial and final fixes in the list
+    
+    returns: list of fixes in order"""
+    # find the indices for the initial and final fixes
+    initial_index = self.airway_fixes.index(initial_fix)
+    final_index = self.airway_fixes.index(final_fix)
+    
+    # get the start and end indices
+    start = min(initial_index, final_index)
+    end = max (initial_index, final_index)
+    
+    # get our list
+    if include_end_points:
+      fix_list = self.airway_fixes[start:end+1]
+    else:
+      fix_list = self.airway_fixes[start+1:end]
+    
+    # reverse our list if the order is opposite to the list order
+    if final_index < initial_index:
+      fix_list.reverse()
+    
+    return fix_list
+    
+class AirwayFix:
+  def __init__(self, record):
+    # save the raw data
+    self.record = record
+    
+    # parse the data
+    self.parse_airway_record(record)
+    return
+  
+  def parse_airway_record(self, record):
+    # SUSAER       J60         0100LAX  K2D 0V    OH                        07590450     18000     45000                         534541709
+    # SUSAER       J60         0110PDZ  K2D 0V    OH                        029900990759 18000     45000                         534551709
+    # SUSAER       J60         0120CIVETK2EA0E    OH                        033303010332 18000     45000                         534562002
+    # SUSAER       J60         0130RESORK2EA0E    OH                        033603470334 18000     45000                         534572002
+    # SUSAER       J60         0140HEC  K2D 0V    OH                        032110640302 18000     45000                         534581709
+    # SUSAER       J60         0150BLD  K2D 0V    OH                        034815970321 18000     45000                         534591709
+    # SUSAER       J60         0160BCE  K2D 0V    OH                        044708760348 18000     45000                         534601709
+    # SUSAER       J60         0170HVE  K2D 0V    OH                        054818840447 18000     45000                         534611709
+    # SUSAER       J60         0180DBL  K2D 0V    OH                        062710870578 18000     45000                         534621709
+    # SUSAER       J60         0190DVV  K2D 0V    OH                        069717350667 18000     45000                         534631709
+    # SUSAER       J60         0200HCT  K3D 0V    OH                        069211790667 18000     45000                         534641709
+    # SUSAER       J60         0210DRABSK3EA0E    OH                        077807500761 18000     45000                         534652002
+    # SUSAER       J60         0220LNK  K3D 0V    OH                        070619500729 18000     45000                         534661709
+    # SUSAER       J60         0230CNOTAK3EA0E    OH                        082603990798 18000     45000                         534672002
+    # SUSAER       J60         0240IOW  K3D 0V    OH                        083310260774 18000     45000                         534681709
+    # SUSAER       J60         0250VORINK5EA0E    OH                        092504590910 18000     45000                         534692002
+    # SUSAER       J60         0260JOT  K5D 0V    OH                        087905000878 18000     45000                         534701709
+    # SUSAER       J60         0270HOBARK5EA0E    OH                        095005320942 18000     45000                         534711901
+    # SUSAER       J60         0280GSH  K5D 0V    OH                        092006230907 18000     45000                         534721709
+    # SUSAER       J60         0290ASHENK5EA0E    OH                        099202230983 18000     45000                         534732002
+    # SUSAER       J60         0300NAPOLK5EA0E    OH                        099902210996 18000     45000                         534742002
+    # SUSAER       J60         0310MAYZEK5EA0E    OH                        100604801002 18000     45000                         534751901
+    # SUSAER       J60         0320JERRIK5EA0E    OH                        102102001014 18000     45000                         534762002
+    # SUSAER       J60         0330DJB  K5D 0V    OH                        101602660993 18000     45000                         534771709
+    # SUSAER       J60         0340CANCRK5EA0E    OH                        105505301051 18000     45000                         534782002
+    # SUSAER       J60         0350HAGUDK6EA0E    OH                        107001191062 18000     45000                         534791709
+    # SUSAER       J60         0360TYSUNK6EA0E    OH                        107307931072 18000     45000                         534801710
+    # SUSAER       J60         0370MIDSTK6EA0E    OH                        109602001084 18000     45000                         534811710
+    # SUSAER       J60         0380PSB  K6D 0V    OH                        110101401091 18000     45000                         534821709
+    # SUSAER       J60         0390DOOTHK6EA0E    OH                        111101181110 18000     45000                         534831709
+    # SUSAER       J60         0400FORTTK6EA0E    OH                        111405551112 18000     45000                         534841709
+    # SUSAER       J60         0410DANNRK6EA0E    OH                        083904021121 18000     45000                         534851709
+    # SUSAER       J60         0420GYNTSK6EA0E    OH                        085001090844 18000     45000                         534861710
+    # SUSAER       J60         0430NEWELK6EA0E    OH                        085201000851 18000     45000                         534871901
+    # SUSAER       J60         0440CANDRK6EA0E    OH                        085402000853 18000     45000                         534882002
+    # SUSAER       J60         0450SAX  K6D 0VE   OH                                0840                                         534891709
+    # 123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012
+    #          1         2         3         4         5         6         7         8         9         10        11        12        13
+    self.route_id = record[13:18].rstrip()
+    self.sequence_number = int(record[25:29])
+    self.fix_id = record[29:34].rstrip()
+    self.fix_section = record[36:28]
+    self.continuation_count = record[38]
+    self.waypoint_description = record[39:43]
+    self.boundary_code = record[44]
+    
+    return

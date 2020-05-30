@@ -25,12 +25,102 @@ Revision History:
 """
 
 import cifp_functions as cf
+import maptools as maptools
 
 # define a version for this file
 VERSION = "1.0"
 
-"""A section of airspace is defined by an AirspaceShape.  One or more AirspaceShapes can 
-be used to define an airspace "structure" such as a Class B airspace around a major airport."""
+class AirspaceShape:
+  """define a basic block of airspace, either controlled or restrictive"""  
+  def __init__(self):
+    self.ar = []
+    
+    self.name = None
+    self.controlling_agency = None
+    
+    return
+  
+  def add_airspace_record(self, airspace_record):
+    if airspace_record.controlling_agency != None:
+      # this must be a continuation record
+      self.controlling_agency = airspace_record.controlling_agency
+    else:
+      # simply append this record to our list
+      self.ar.append(airspace_record)
+      
+      # the first record in the set will have the full name
+      if airspace_record.name != "":
+        self.name = airspace_record.name
+    
+    return
+
+  def build_airspace_shape(self):
+    """build a list of (lat, lon) tuples defining and airspace shape"""
+    # initialize our shape with the first point
+    shape = [(self.ar[0].latitude, self.ar[0].longitude)]
+    
+    # work through the list of points
+    for i in range(len(self.ar)):
+      via = self.ar[i].boundary_via[0]
+      end = self.ar[i].boundary_via[1]
+      
+      if via == "A":
+        # arc by edge
+        print("AirspaceShape.build_airspace_shape: Arc by edge not yet supported")
+      elif via == "C":
+        # circle
+        shape = maptools.circle((self.ar[0].arc_origin_latitude, self.ar[0].arc_origin_longitude), self.ar[0].arc_distance)
+      elif via == "G":
+        # Great circle point
+        # if this is an end, add the first point otherwise add the next point
+        if end == "E":
+          shape.append((self.ar[0].latitude, self.ar[0].longitude))
+        else:
+          shape.append((self.ar[i+1].latitude, self.ar[i+1].longitude))
+      elif via == "H":
+        # Rhumb line -- not really correct, but just treat as a great circle, error won't be large for normal distances
+        if end == "E":
+          shape.append((self.ar[0].latitude, self.ar[0].longitude))
+        else:
+          shape.append((self.ar[i+1].latitude, self.ar[i+1].longitude))
+      elif via == "L" or via == "R":
+        # define the start
+        arc_begin = (self.ar[i].latitude, self.ar[i].longitude)
+        
+        # define the end
+        if end == "E":
+          arc_end = (self.ar[0].latitude, self.ar[0].longitude)
+        else:
+          arc_end = (self.ar[i+1].latitude, self.ar[i+1].longitude)
+        
+        # define the center
+        arc_center = (self.ar[i].arc_origin_latitude, self.ar[i].arc_origin_longitude)
+        
+        # get the radius
+        radius_nm = self.ar[i].arc_distance_nm
+        
+        # get the direction
+        if via == "R":
+          clockwise = True
+        else:
+          clockwise = False
+        
+        # create a name
+        if self.ar[i].airspace_classification != None:
+          # UC Airspace
+          name = "Class {} Section {}".format(self.ar[i].airspace_classification, self.ar[i].multiple_code)
+        else:
+          name = "{} Section {}".format(airspace_record.airspace_designation, airspace_record.multiple_code)
+        
+        # build the arc
+        arc = maptools.arc_path(arc_begin, arc_end, arc_center, radius_nm, clockwise, name)
+        for p in arc:
+          shape.append(p)
+      else:
+        print("AirspaceShape.build_airspace_shape: Unrecognized boundary via")
+        
+    return shape
+  
 
 class AirspaceRecord:
   
@@ -57,10 +147,17 @@ class AirspaceRecord:
     
     # parse the data
     self.section = record[4:6]
+    
+    self.continuation = False
+    
     if self.section == "UC":
       self.parse_controlled_airspace(record)
     elif self.section == "UR":
-      self.parse_restrictive_airspace(record)
+      if record[24] == '0' or record[24] == '1':
+        self.parse_restrictive_airspace(record)
+      else:
+        self.continuation = True
+        self.parse_continuation_record(record)
     else:
       print("AirspaceRecord.__init__: Unknown airspace type: {}".format(self.section))
     return 
@@ -98,12 +195,16 @@ class AirspaceRecord:
     # SUSAUCK2ZKBKF PAD  B01800     GEN39393650W104402500                                                                        473501703
     # 123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012
     #          1         2         3         4         5         6         7         8         9         10        11        12        13
-    self.airspace_type = record[8]  # eg: self.TYPE_CONTROLLED_CLASS_C
     self.airport = record[9:14].rstrip() # airport identifier
     self.airspace_center_section = record[14:16]
     self.airspace_classification = record[16]  # A through G
     
+    # unused members
+    self.airspace_designation = None
+    self.controlling_agency = None
+    
     # same as UR
+    self.airspace_type = record[8]  # eg: self.TYPE_CONTROLLED_CLASS_C
     self.multiple_code = record[19] # designator defining airspace section (A-)...airspace with only one section will only have A
     self.sequence_number = int(record[20:24])
     self.continuation_count = cf.parse_int(record[24])
@@ -130,11 +231,16 @@ class AirspaceRecord:
     # SUSAURK2MCOUGAR H  A00700L    GEN38344100W103000000                                                                        580351703
     # 123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012
     #          1         2         3         4         5         6         7         8         9         10        11        12        13
-
-    self.airspace_type = record[8]  # eg: self.TYPE_RESTRICTIVE_PROHIBITED
     self.airspace_designation = record[9:19].rstrip()
     
+    # unused records
+    self.airport = None
+    self.airspace_center_section = None
+    self.airspace_classification = None
+    self.controlling_agency = None
+    
     # same as UC
+    self.airspace_type = record[8]  # eg: self.TYPE_RESTRICTIVE_PROHIBITED
     self.multiple_code = record[19] # designator defining airspace section (A-)...airspace with only one section will only have A
     self.sequence_number = int(record[20:24])
     self.continuation_count = cf.parse_int(record[24])
@@ -152,54 +258,19 @@ class AirspaceRecord:
   def parse_continuation_record(self, record):
     # Continuation Types (5.91, p 105)
     # C - Call Sign/Controlling Agency
+    self.airspace_designation = record[9:19].rstrip()
+    
+    # same as UC
+    self.multiple_code = record[19] # designator defining airspace section (A-)...airspace with only one section will only have A
+    
+    # check the application type to know what to parse
     if record[25] == "C":
       self.controlling_agency = record[99:123].rstrip()
     else:
+      self.controlling_agency = None
       print("AirpsaceRecord.parse_continuation_record: Unhandled Continuation Record {}".format(record))
     
     return
     
 
-  
-  def parse_procedure_record(self):
-    
-    # controlled airspace items
-    self.airspace_center
-    self.airspace_classification  # A-G
-    
-    
-    # restrictive airspace items
-    self.designation
-    self.controlling_agency # from a continuation record
-    
-    # common airspace items
-    self.airspace_type  # coded from static class members
-    self.multiple_code
-    self.sequence_number
-    self.boundary_via
-    self.latitude
-    self.longitude
-    self.arc_origin_latitude
-    self.arc_origin_longitude
-    self.arc_distance_nm
-    self.arc_bearing
-    self.lower_limit_ft
-    self.upper_limit_ft
-    self.airspace_name
-    
 
-class AirspaceShape:
-
-  
-  """define a basic block of airspace, either controlled or restrictive"""  
-  def __init__(self):
-    return
-
-    
-
-  
-
-
-if __name__ == '__main__':
-  # when this file is run directly, run this code
-  print(VERSION)

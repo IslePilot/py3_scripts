@@ -119,6 +119,23 @@ class CIFPReader:
                                       pr.transition_identifier,
                                       pr.fix_identifier))
     
+    print("==================================")
+    
+    for airway_fix in self.usa.enroute_airways['J60'].airway:
+      print("{}: {}".format(airway_fix.route_id, airway_fix.fix_id))
+    
+    print(self.usa.enroute_airways['J60'].get_fixes('JOT', 'DBL'))
+    print(self.usa.enroute_airways['J60'].get_fixes('JOT', 'DBL', False))
+    
+    print("==================================")
+    print(self.usa.restrictive_airspace["COUGAR H Section A"].name)
+    print(self.usa.restrictive_airspace["COUGAR H Section A"].controlling_agency)
+    print(self.usa.restrictive_airspace["COUGAR H Section A"].build_airspace_shape())
+    
+    print("==================================")
+    print(self.usa.airports['KBKF'].controlled_airspace["Class D Section B"].name)
+    print(self.usa.airports['KBKF'].controlled_airspace["Class D Section B"].controlling_agency)
+    print(self.usa.airports['KBKF'].controlled_airspace["Class D Section B"].build_airspace_shape())
     return
   
   def process_file(self):
@@ -170,7 +187,13 @@ class CIFPReader:
             print("CIFPReader.process_file: Unhandled Enroute Waypoint Continuation: {}".format(line.rstrip()))
         
         elif code == "ER":  # Enroute Airway
-          continue
+          if primary:
+            data = procedure.AirwayFix(line) # returns an AirwayFix
+            
+            # airways will be confused if they aren't the full route, so add all
+            self.usa.add_airway_fix(data)
+          else:
+            print("CIFPReader.process_file: Unhandled Enroute Airway Continuation: {}".format(line.rstrip()))
         elif code == "HA":  # Heliport
           continue
         elif code == "HC":  # Helicopter Terminal Waypoint
@@ -229,7 +252,7 @@ class CIFPReader:
             if self.usa.has_airport(data.airport):
               self.usa.airports[data.airport].add_procedure(data)
           else:
-            #print("CIFPReader.process_file: Unhandled IAP Continuation: {}".format(line.rstrip()))
+            data = procedure.ProcedureRecord(line)
             continue
         
         elif code == "PG":  # Runway
@@ -265,23 +288,25 @@ class CIFPReader:
           if primary:
             data = airspace.AirspaceRecord(line)
             
-            # save the point if this is an airport we are including
+            # save the AirspaceRecord if this is an airport we are including
             if self.usa.has_airport(data.airport):
               self.usa.airports[data.airport].add_airspace(data)
           else:
-            # process the continuation record
-            data.parse_continuation_record(line)
+            # not handled for UC
+            print("CIFPReader.process_file: Unhandled UC Continuation Record: {}".format(line.rstrip()))
         
         elif code == "UR":  # Restricted Airspace
+          data = airspace.AirspaceRecord(line)
           if primary:
-            data = airspace.AirspaceRecord(line)
-            
             # if we have a point we want, save it
             if data != None and self.in_roi(data.latitude, data.longitude):
+              self.uc_cr_armed = True
               self.usa.add_airspace(data)
+            else:
+              self.uc_cr_armed = False
           else:
-            # process the continuation record
-            data.parse_continuation_record(line)
+            if self.uc_cr_armed:
+              self.usa.add_airspace(data)
         else:
           print("CIFPReader.process_file: Unprocessed Record: {} {}".format(code, line))
       
@@ -537,13 +562,6 @@ class CIFPReader:
                     width_ft=width, 
                     dthreshold_ft=dthreshold, 
                     airport=airport)
-  
-  
-    
-
-
-
-# define a version for this file
 
 class WaypointsOut:
   def __init__(self, path, cifp_version):
@@ -854,194 +872,9 @@ if __name__ == '__main__':
   """
   runway_processor = RunwayProcessor(runways_out)
   
-
-  first_uc = True
-  first_ur = True
-  
-  with open(r"C:\Data\CIFP\CIFP_200521\FAACIFP18", "r") as f:
-    seen = {}
-    for line in f:
-      info = CIFPReader.get_record_info(line)
-            
-      # UC Controlled Airspace 3.2.6.3
-      if info.section_code == "U" and info.subsection_code == "C":
-        data = CIFPReader.parse_controlled_airspace(line)
-        # is this even in our ROI?
-        if cifp.in_roi(data.arc_origin_latitude, data.arc_origin_longitude) or cifp.in_roi(data.latitude, data.longitude) or first_uc == False:
-          if first_uc:
-            if data.boundary_via == "CE":
-              # this is a complete shape for this airport, save and reset
-              shape = maptools.circle((data.arc_origin_latitude, data.arc_origin_longitude), data.arc_distance)
-              airspace_out.add_shape(data.airspace_center, 
-                                     "Class {} Sequence {}".format(data.airspace_classification, data.multiple_code), 
-                                     "", 
-                                     shape, 
-                                     simplekml.Color.blue, 
-                                     ShapesOut.OUTCOLOR_MAGENTA)
-            else:
-              # save this point and continue
-              uc_current = [data]
-              first_uc = False
-          else:
-            # add this point to our list
-            uc_current.append(data)
-            
-            # is this the last point in the shape?
-            last = data.boundary_via[1] == "E"
-            if last:
-              # process this shape, begin with the first point
-              shape = [(uc_current[0].latitude, uc_current[0].longitude)]
-              for i in range(len(uc_current)):
-                if uc_current[i].boundary_via[0] == "A":
-                  # arc by edge
-                  print("Arc by edge not yet supported")
-                elif uc_current[i].boundary_via[0] == "C":
-                  # circle
-                  print("Circle should have been supported above")
-                elif uc_current[i].boundary_via[0] == "G":
-                  # great circle
-                  # simply add the next point
-                  if uc_current[i].boundary_via[1] == 'E':
-                    shape.append((uc_current[0].latitude, uc_current[0].longitude))
-                  else:
-                    shape.append((uc_current[i+1].latitude, uc_current[i+1].longitude))
-                elif uc_current[i].boundary_via[0] == "H":
-                  # rhumb line
-                  print("Rhumb line not yet supported")
-                elif uc_current[i].boundary_via[0] == "L" or uc_current[i].boundary_via[0] == "R":
-                  # CCW arc
-                  arc_begin = (uc_current[i].latitude, uc_current[i].longitude)
-                  
-                  if uc_current[i].boundary_via[1] == 'E':
-                    arc_end = (uc_current[0].latitude, uc_current[0].longitude)
-                  else:
-                    arc_end = (uc_current[i+1].latitude, uc_current[i+1].longitude)
-                    
-                  arc_center = (uc_current[i].arc_origin_latitude, uc_current[i].arc_origin_longitude)
-                  
-                  radius_nm = uc_current[i].arc_distance
-                  
-                  if uc_current[i].boundary_via[0] == "R":
-                    clockwise = True
-                  else:
-                    clockwise = False
-                  arc = maptools.arc_path(arc_begin, arc_end, arc_center, radius_nm, clockwise, uc_current[i].airspace_center)
-                  for p in arc:
-                    shape.append(p)
-                else:
-                  print("Unrecognized boundary via")
-                  print(data)
-              
-              # add the data to the files
-              airspace_out.add_shape(data.airspace_center, 
-                                     "Class {} Sequence {}".format(data.airspace_classification, data.multiple_code), 
-                                     "", 
-                                     shape, 
-                                     simplekml.Color.blue, 
-                                     ShapesOut.OUTCOLOR_MAGENTA)
-              
-              # reset
-              first_uc = True
-      
-      # UR Restrictive Airspace 3.2.6.1
-      # airspace_type, designation, multiple_code, sequence_number, boundary_via, latitude, longitude, 
-      # arc_origin_latitude, arc_origin_longitude, arc_distance, arc_bearing, name
-                              
-      if info.section_code == "U" and info.subsection_code == "R":
-        data = cifp.parse_restricted_airspace(line)
-        if data != None:
-          if cifp.in_roi(data.arc_origin_latitude, data.arc_origin_longitude) or cifp.in_roi(data.latitude, data.longitude) or first_ur == False:
-            if first_ur:
-              # clear the agency name because we don't have it yet
-              cifp.reset_controlling_agency()
-              
-              if data.boundary_via == "CE":
-                # this is a complete shape for this airport, save and reset
-                shape = maptools.circle((data.arc_origin_latitude, data.arc_origin_longitude), data.arc_distance)
-                restricted_out.add_shape(data.designation, 
-                                         "Type {} Sequence {}".format(data.airspace_type, data.multiple_code), 
-                                         "", 
-                                         shape, 
-                                         simplekml.Color.magenta, 
-                                         ShapesOut.OUTCOLOR_ORANGE)
-              else:
-                # save this point and continue
-                ur_current = [data]
-                first_ur = False
-            else:
-              # add the point to our list
-              ur_current.append(data)
-              
-              # is this the last point in the shape?
-              last = data.boundary_via[1] == "E"
-              if last:
-                # process this shape, begin with the first point
-                shape = [(ur_current[0].latitude, ur_current[0].longitude)]
-                for i in range(len(ur_current)):
-                  if ur_current[i].boundary_via[0] == "A":
-                    # arc by edge
-                    print("Arc by edge not yet supported")
-                  elif ur_current[i].boundary_via[0] == "C":
-                    # circle
-                    print("Circle should have been supported above: {}".format(ur_current[i]))
-                    
-                  elif ur_current[i].boundary_via[0] == "G":
-                    # great circle
-                    # simply add the next point
-                    if ur_current[i].boundary_via[1] == 'E':
-                      shape.append((ur_current[0].latitude, ur_current[0].longitude))
-                    else:
-                      shape.append((ur_current[i+1].latitude, ur_current[i+1].longitude))
-                  elif ur_current[i].boundary_via[0] == "H":
-                    # rhumb line
-                    # treat this like a great circle and warn
-                    #print("Caution: Treating Rhumb Line path as a Great Circle: {}".format(ur_current[i].designation))
-                    # simply add the next point
-                    if ur_current[i].boundary_via[1] == 'E':
-                      shape.append((ur_current[0].latitude, ur_current[0].longitude))
-                    else:
-                      shape.append((ur_current[i+1].latitude, ur_current[i+1].longitude))
-                  elif ur_current[i].boundary_via[0] == "L" or ur_current[i].boundary_via[0] == "R":
-                    # CCW arc
-                    arc_begin = (ur_current[i].latitude, ur_current[i].longitude)
-                    
-                    if ur_current[i].boundary_via[1] == 'E':
-                      arc_end = (ur_current[0].latitude, ur_current[0].longitude)
-                    else:
-                      arc_end = (ur_current[i+1].latitude, ur_current[i+1].longitude)
-                      
-                    arc_center = (ur_current[i].arc_origin_latitude, ur_current[i].arc_origin_longitude)
-                    
-                    radius_nm = ur_current[i].arc_distance
-                    
-                    if ur_current[i].boundary_via[0] == "R":
-                      clockwise = True
-                    else:
-                      clockwise = False
-                    arc = maptools.arc_path(arc_begin, arc_end, arc_center, radius_nm, clockwise,
-                                            "{} {}".format(ur_current[i].designation, ur_current[i].sequence_number))
-                    for p in arc:
-                      shape.append(p)
-                  else:
-                    print("UR Unrecognized boundary via")
-                    print(data)
-                
-                # add the data to the files
-                restricted_out.add_shape(data.designation, 
-                                         "Type {} Sequence {}".format(data.airspace_type, data.multiple_code), 
-                                         "{}".format(cifp.get_controlling_agency()), 
-                                         shape, 
-                                         simplekml.Color.magenta, 
-                                         ShapesOut.OUTCOLOR_ORANGE)
-                
-                # reset
-                first_ur = True
-
   # process the runways
   runway_processor.process_runway(runways, airports)
-   
 
-  
   """
   print("Done.")
   

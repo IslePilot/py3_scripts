@@ -25,6 +25,8 @@ Revision History:
 """
 import procedure as procedure
 
+import airspace as airspace
+
 class Airport:
   def __init__(self, pa_record):
     # save the reference point
@@ -37,7 +39,7 @@ class Airport:
     self.ndbs = {}
     self.waypoints = {}
     
-    self.airspace_shapes = [] # list of lists of coordinates defining the shape
+    self.controlled_airspace = {} # dictionary containing AirspaceShapes
     
     # Procedure Dictionaries (dictionaries of Procedrues)
     self.sids = {}
@@ -98,6 +100,17 @@ class Airport:
     return
   
   def add_airspace(self, airspace_record):
-    # todo
-    return
+    # identify where this airspace record belongs
+    key = "Class {} Section {}".format(airspace_record.airspace_classification, airspace_record.multiple_code)
+    
+    # add this key if it doesn't already exist
+    if key not in self.controlled_airspace:
+      self.controlled_airspace[key] = airspace.AirspaceShape()
+    
+    # add the record
+    self.controlled_airspace[key].add_airspace_record(airspace_record)
+    
+    return 
+    
+
 
