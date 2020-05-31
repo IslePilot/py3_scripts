@@ -56,7 +56,7 @@ class AirspaceShape:
 
   def build_airspace_shape(self):
     """build a list of (lat, lon) tuples defining and airspace shape"""
-    # initialize our shape with the first point
+    # initialize our shape with the first cifp_point
     shape = [(self.ar[0].latitude, self.ar[0].longitude)]
     
     # work through the list of points
@@ -71,8 +71,8 @@ class AirspaceShape:
         # circle
         shape = maptools.circle((self.ar[0].arc_origin_latitude, self.ar[0].arc_origin_longitude), self.ar[0].arc_distance)
       elif via == "G":
-        # Great circle point
-        # if this is an end, add the first point otherwise add the next point
+        # Great circle cifp_point
+        # if this is an end, add the first cifp_point otherwise add the next cifp_point
         if end == "E":
           shape.append((self.ar[0].latitude, self.ar[0].longitude))
         else:

@@ -23,28 +23,56 @@ Revision History:
 
   May 25, 2020, ksb, created
 """
-import procedure as procedure
 
+import cifp_point as cp
+
+
+import procedure as procedure
 import airspace as airspace
 
 class Airport:
-  def __init__(self, pa_record):
-    # save the reference point
-    self.reference_point = pa_record
+  def __init__(self, pa_point):
+    # save the reference cifp_point
+    self.reference_point = pa_point
     self.airport = self.reference_point.airport
     self.ident = self.reference_point.ident
             
-    # initialize holders (dictionaries of Points)
-    self.runways = {}
-    self.ndbs = {}
-    self.waypoints = {}
+    # initialize holders
+    self.runways = cp.CIFPPointSet()
+    self.ndbs = cp.CIFPPointSet()
+    self.waypoints = cp.CIFPPointSet()
     
     self.controlled_airspace = {} # dictionary containing AirspaceShapes
     
-    # Procedure Dictionaries (dictionaries of Procedrues)
+    # Procedure Dictionaries (dictionaries of Procedures)
     self.sids = {}
     self.stars = {}
     self.approaches = {}
+    
+    return 
+  
+  def add_point(self, point):
+    if point.code == "PN":
+      # terminal NDB
+      self.ndbs.add_point(point)
+    elif point.code == "PC":
+      # terminal waypoint
+      self.waypoints.add_point(point)
+    elif point.code == "PG":
+      # runways
+      self.runways.add_point(point)      
+    return 
+  
+  def add_cr(self, cr):
+    # essentially do nothing for now
+    if cr.code == "PA":
+      print("Airport.add_cr: Airport Reference continuation record not supported")
+    elif cr.code ==  "PN":
+      print("Airport.add_cr: Terminal NDB continuation record not supported")
+    elif cr.code ==  "PC":
+      print("Airport.add_cr: Terminal Waypoint continuation record not supported")
+    elif cr.code ==  "PG":
+      print("Airport.add_cr: Runway continuation record not supported")
     
     return 
   
@@ -54,18 +82,6 @@ class Airport:
     self.enroute_ndbs = ndbs
     self.enroute_waypoints = waypoints
     return 
-  
-  def add_waypoint(self, point):
-    self.waypoints[point.ident] = point
-    return
-  
-  def add_ndb(self, point):
-    self.ndbs[point.ident] = point
-    return
-  
-  def add_runway(self, point):
-    self.runways[point.name] = point
-    return
   
   def add_procedure(self, procedure_record):
     if procedure_record.subsection_code == "D":
@@ -111,6 +127,17 @@ class Airport:
     self.controlled_airspace[key].add_airspace_record(airspace_record)
     
     return 
+  
+  def get_runways(self):
+    # get a list of runways, position, and description
+    return self.runways.get_points()
+  
+  def get_ndbs(self):
+    # get a list of terminal NDBs, position, and description
+    return self.ndbs.get_points()
+  
+  def get_waypoints(self):
+    # get a list of terminal waypoints, position, and description
+    return self.waypoints.get_points()
     
-
 

@@ -61,8 +61,8 @@ def calc_vapor_saturation_pressure_hPa(temp_c):
   C5 = -15.9618719
   C6 = 1.80122502
   
-  Tn = 273.16 # triple point temperature, K
-  Pn = 6.11657  # vapor pressure at triple point temperature, hPa
+  Tn = 273.16 # triple cifp_point temperature, K
+  Pn = 6.11657  # vapor pressure at triple cifp_point temperature, hPa
   A0 = -13.928169
   A1 = 34.707823
   

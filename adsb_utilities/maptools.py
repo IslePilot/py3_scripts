@@ -38,7 +38,7 @@ def circle(origin, radius_nm):
   
   returns: list of waypoints(lat, lon) defining the arc (eg: [[lat1, lon1], [lat2, lon2]...]
   """
-  # convert our center point to UTM
+  # convert our center cifp_point to UTM
   center = utm.from_latlon(*origin)
   if origin[0] >= 0.0:
     northern_hemisphere = True
@@ -63,9 +63,9 @@ def circle(origin, radius_nm):
 def arc_path(arc_begin, arc_end, arc_center, radius_nm, clockwise, name):
   """build a list of lat.lon coordinates defining points along an arc
   
-  arc_begin: tuple defining the starting point (lat, lon) in decimal degrees,+N, +E
-  arc_end: tuple defining the ending point (lat, lon) in decimal degrees,+N, +E
-  arc_center: tuple defining the center point (lat, lon) in decimal degrees,+N, +E
+  arc_begin: tuple defining the starting cifp_point (lat, lon) in decimal degrees,+N, +E
+  arc_end: tuple defining the ending cifp_point (lat, lon) in decimal degrees,+N, +E
+  arc_center: tuple defining the center cifp_point (lat, lon) in decimal degrees,+N, +E
   radius_nm: arc radius in nautical miles
   clockwise: bool defining arc direction
   """
@@ -154,11 +154,11 @@ def build_runway(arrival_end, departure_end, width_ft, bearing, declination):
   return points
 
 def get_utm_rotation(lat, lon):
-  # get the utm for the point
+  # get the utm for the cifp_point
   p1_easting, p1_northing, zone_number, zone_letter = utm.from_latlon(lat, lon)
   p1 = (p1_easting, p1_northing)
   
-  # get the utm for a point 0.01 degrees north
+  # get the utm for a cifp_point 0.01 degrees north
   p2_easting, p2_northing, _, _ = utm.from_latlon(lat+0.01, lon, zone_number, zone_letter) # force zone to be the same
   p2 = (p2_easting, p2_northing)
   
@@ -213,7 +213,7 @@ def arcpoints(waypoint1, waypoint2, radius_nm, heading1_deg_mag, heading2_deg_ma
   mideast = (wp2[0] + wp1[0])/2.0
   midnorth = (wp2[1] + wp1[1])/2.0
   
-  # we know the distance from each point to the midpoint (halfd), and we know our radius,
+  # we know the distance from each cifp_point to the midpoint (halfd), and we know our radius,
   # find the distance along the bisector from the midpoint to the arc centerpoints
   bslen = math.sqrt(radius**2 - halfd**2)
   

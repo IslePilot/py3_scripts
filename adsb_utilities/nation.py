@@ -23,7 +23,11 @@ Revision History:
 
   May 25, 2020, ksb, created
 """
-import procedure as procedure
+
+import cifp_point as cp
+import airway as airway
+
+
 import airspace as airspace
 
 class NationalAirspace:
@@ -32,21 +36,15 @@ class NationalAirspace:
   def __init__(self):
     """A NationalAirspace constructor.  Creates the holder for airspace information related to the nation"""
     # D  - VHF Navaids
-    self.vors = {}  # dictionary of cf.Point instances, key=3 letter ID of the VOR i.e. DEN, SEY, or BJC
+    self.vors = cp.CIFPPointSet()
     
     # DB - NDB Navaids
-    self.ndbs = {} # dictionary of cf.Point instances, key 2 or 3 letter ID of the NDB i.e. FN, or IHS
+    self.ndbs = cp.CIFPPointSet()
     
     # EA - Enroute Waypoints
-    self.enroute_waypoints = {} # dictionary of cf.Point instances, key 5 letter ID of the waypoint i.e. LANDR or SAYGE
+    self.enroute_waypoints = cp.CIFPPointSet()
     
-    # ER - Enroute Airways
-    self.enroute_airways = {} # dictionary of TBD, key ID of the airway i.e. V85, J56, Q88
-    
-    # UR
-    self.restrictive_airspace = {} # dictionary of TBD, key designator of the airspace i.e. COUGAR H
-    
-    # Airports encapsulate multiple P* records:
+    # Airports encapsulate multiple records:
     #   PA - Airport Reference Point
     #   PC - Terminal Waypoints
     #   PD - SIDs
@@ -54,34 +52,25 @@ class NationalAirspace:
     #   PF - Instrument Approaches
     #   PG - Runways
     #   PN - Terminal NDBs
-    self.airports = {} # dictionary of airport.Airport instances, key=4 letter ID of the airport i.e. KBJC, KDEN, KBID
+    #   UC - Controlled Airspace
+    self.airports = {} # dictionary of airport.Airport, key is airport ident i.e. KBJC
     
-    return
-  
-  def add_vor(self, point):
-    self.vors[point.ident] = point
-    return
-  
-  def add_ndb(self, point):
-    self.ndbs[point.ident] = point
-    return
-  
-  def add_enroute_waypoint(self, point):
-    self.enroute_waypoints[point.ident] = point
+    # ER - Enroute Airways
+    self.enroute_airways = {} # dictionary of Airways, key ID of the airway i.e. V85, J56, Q88
+    
+    # UR
+    self.restrictive_airspace = {} # dictionary containing AirspaceShapes, key is "<airspace_designation> Section <multiple_code>"
+    
     return
   
   def add_airway_fix(self, airway_fix):
     # if we don't already have this airway, create it
     if airway_fix.route_id not in self.enroute_airways:
-      self.enroute_airways[airway_fix.route_id] = procedure.Airway()
+      self.enroute_airways[airway_fix.route_id] = airway.Airway()
     
     # save this fix to our airway
     self.enroute_airways[airway_fix.route_id].add_fix(airway_fix)
     
-    return
-  
-  def add_airport(self, airport):
-    self.airports[airport.ident] = airport
     return
   
   def add_airspace(self, airspace_record):
@@ -100,6 +89,38 @@ class NationalAirspace:
       return True
     return False
   
+  def get_vors(self):
+    # get a list of the vors, location, and description
+    return self.vors.get_points()
+  
+  def get_ndbs(self):
+    # get a list of the ndbs, location, and description
+    return self.ndbs.get_points()
+  
+  def get_waypoints(self):
+    # get a list of the enroute waypoints, location, and description
+    return self.enroute_waypoints.get_points()
+  
+  
+  def get_runways(self, airport):
+    return self.airports[airport].get_runways()
+  
+  def get_terminal_waypoints(self, airport):
+    return self.airports[airport].get_waypoints()
+  
+  def get_terminal_ndbs(self, airport):
+    return self.airports[airport].get_ndbs()
+  
+  
+  def get_airway(self, route_id, initial_fix=None, final_fix=None, include_end_points=True):
+    if route_id in self.enroute_airways:
+      # airway exists
+      return self.enroute_airways[route_id].get_fixes(initial_fix, final_fix, self.vors, self.ndbs, self.enroute_waypoints, include_end_points)
+    else:
+      print("NationalAirspace.get_airway: Airway {} doesn't exist".format(route_id))
+    
+    return []
+    
   
   
   

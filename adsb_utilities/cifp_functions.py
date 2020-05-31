@@ -135,19 +135,21 @@ def get_record_info(record):
 
   return SECTIONS(area_code, section_code, subsection_code)
   
+def section(record):
+  info = get_record_info(record)
+  return info.section_code + info.subsection_code
+
 def parse_float(fstr, divisor=1.0):
   # if fstr is empty we are done
   if fstr.strip() == "":
     return None
   return float(fstr)/divisor
 
-
 def parse_int(istr):
   # if istr is empty we are done
   if istr.strip() == "":
     return None
   return int(istr)
-
 
 def parse_lat(lat):
   # if lat is an empty string (just whitespace), we are done
@@ -166,7 +168,6 @@ def parse_lat(lat):
     latitude = -latitude
   return latitude
 
-
 def parse_lon(lon):
   # if lon is an empty string (just whitespace), we are done
   if lon.strip() == "":
@@ -184,7 +185,6 @@ def parse_lon(lon):
     longitude = -longitude
   return longitude
 
-
 def parse_variation(var):
   # 5.39
   # E0080
@@ -194,58 +194,4 @@ def parse_variation(var):
   if hem == "E":
     variation = -variation
   return variation
-
-class Point:
-  """Points are locations in 3D space and include VORs, NDBs, Waypoints, 
-  runway locations, and airport locations"""
-  POINT_VOR = 0
-  POINT_VORDME = 1
-  POINT_VORTAC = 2
-  POINT_NDB = 3
-  POINT_TERMINAL_NDB = 4
-  POINT_ENROUTE_WAYPOINT = 5
-  POINT_TERMINAL_WAYPOINT = 6
-  POINT_AIRPORT = 7
-  POINT_RUNWAY = 8
-  
-  def __init__(self, ident, name, style, latitude, longitude, continuation_count,
-               declination=None, frequency=None, elevation_ft=None, 
-               length_ft=None, bearing=None, tch_ft=None, width_ft=None, 
-               dthreshold_ft=None, airport=None):
-    """Create a point instance
-    
-    ident: Identifier for the point (DEN, FN, TOMSN, KBJC)
-    name: Expanded name of the point (Denver, COLLN, TOMSN, Rocky Mountain Metropolitan)
-    style: Type of waypoint (POINT_VOR, etc.)
-    latitude: WGS84 latitude (decimal degrees, northern hemisphere positive)
-    longitude: WGS84 longitude (decimal degrees, eastern hemisphere positive)
-    continuation: continuation number
-    declination: [optional] magnetic variation at the point, or the alignment of the navaid
-    frequency: [optional] radio frequency of the navaid (VOR in MHz, NDB in kHz)
-    elevation_ft: [optional] elevation in feet above sea level
-    length_ft: [optional] runway length in feet
-    bearing: [optional] runway magnetic alignment
-    tch_ft: [optional] threshold crossover height in feet
-    width_ft: [optional] runway width in feet
-    dthreshold_ft: [optional] displaced threshold distance in feet
-    airport: [optional] ident of the airport this item "belongs" to
-    """
-    self.ident = ident
-    self.name = name
-    self.style = style
-    self.latitude = latitude
-    self.longitude = longitude
-    self.continuation_count = continuation_count
-    self.declination = declination
-    self.frequency = frequency
-    self.elevation_ft = elevation_ft
-    self.length_ft = length_ft
-    self.bearing = bearing
-    self.tch_ft = tch_ft
-    self.width_ft = width_ft
-    self.dthreshold_ft = dthreshold_ft
-    self.airport = airport
-        
-    return
-
 

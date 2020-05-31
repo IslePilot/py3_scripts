@@ -26,7 +26,9 @@ Revision History:
 
 
 import cifp_functions as cf
-import maptools as maptools
+import cifp_point as cp
+import airway as airway
+
 import airspace as airspace
 import airport as airport
 import procedure as procedure
@@ -119,13 +121,10 @@ class CIFPReader:
                                       pr.transition_identifier,
                                       pr.fix_identifier))
     
-    print("==================================")
-    
-    for airway_fix in self.usa.enroute_airways['J60'].airway:
-      print("{}: {}".format(airway_fix.route_id, airway_fix.fix_id))
-    
-    print(self.usa.enroute_airways['J60'].get_fixes('JOT', 'DBL'))
-    print(self.usa.enroute_airways['J60'].get_fixes('JOT', 'DBL', False))
+    print("= Airway Test =================================")
+    print(self.usa.get_airway("J60"))
+    print(self.usa.get_airway("J60", "DBL", "DRABS"))
+    print(self.usa.get_airway("J60", "DRABS", "DBL", False))
     
     print("==================================")
     print(self.usa.restrictive_airspace["COUGAR H Section A"].name)
@@ -134,171 +133,111 @@ class CIFPReader:
     
     print("==================================")
     print(self.usa.airports['KBKF'].controlled_airspace["Class D Section B"].name)
-    print(self.usa.airports['KBKF'].controlled_airspace["Class D Section B"].controlling_agency)
     print(self.usa.airports['KBKF'].controlled_airspace["Class D Section B"].build_airspace_shape())
+    
+    print("= Airport Point Test =================================")
+    print(self.usa.get_runways('KBJC'))
+    print(self.usa.get_terminal_waypoints('KBJC'))
+    
+    
     return
   
   def process_file(self):
     
     with open(self.filename, "r") as f:
       # now process each line in the file
-      for line in f:
+      for record in f:
         # identify the type of line
-        info = cf.get_record_info(line)
-        code = info.section_code + info.subsection_code
-        primary = self.is_primary(code, line)
+        self.code = cf.section(record)
         
         # parse the line
-        if code == "XX":  # Header
+        if self.code == "XX":  # Header
           continue
-        elif code == "AS":  # Grid Minimum Off Route Altitude (MORA)
+        elif self.code == "AS":  # Grid Minimum Off Route Altitude (MORA)
           continue
-        elif code == "D ":  # VHF Navaid
-          # 4.1.2
-          if primary:
-            data = self.parse_vhf_navaid_primary(line) # returns a cf.Point
-              
-            # if we have a point we want, save it
-            if data != None and self.in_roi(data.latitude, data.longitude):
-              self.usa.add_vor(data)
-          else:
-            print("CIFPReader.process_file: Unhandled VHF Navaid Continuation: {}".format(line.rstrip()))
-        
-        elif code == "DB":  # NDB
-          # 4.1.3
-          if primary:
-            data = self.parse_ndb_primary(line) # returns a cf.Point
-            
-            # if we have a point we want, save it
-            if data != None and self.in_roi(data.latitude, data.longitude):
-              self.usa.add_ndb(data)
-          else:
-            print("CIFPReader.process_file: Unhandled NDB Continuation: {}".format(line.rstrip()))
-        
-        elif code == "EA":  # Waypoint
-          # 4.1.4
-          if primary:
-            data = self.parse_waypoint_primary(line) # returns a Point
-            
-            # if we have a point we want, save it
-            if data != None and self.in_roi(data.latitude, data.longitude):
-              self.usa.add_enroute_waypoint(data)
-          else:
-            print("CIFPReader.process_file: Unhandled Enroute Waypoint Continuation: {}".format(line.rstrip()))
-        
-        elif code == "ER":  # Enroute Airway
-          if primary:
-            data = procedure.AirwayFix(line) # returns an AirwayFix
+        elif self.code == "D ":  # VHF Navaid
+          self.process_point(record, self.usa.vors)
+        elif self.code == "DB":  # NDB
+          self.process_point(record, self.usa.ndbs)
+        elif self.code == "EA":  # Waypoint
+          self.process_point(record, self.usa.enroute_waypoints)
+        elif self.code == "ER":  # Enroute Airway
+          if self.is_primary(record):
+            data = airway.AirwayFix(record) # returns an AirwayFix
             
             # airways will be confused if they aren't the full route, so add all
             self.usa.add_airway_fix(data)
           else:
-            print("CIFPReader.process_file: Unhandled Enroute Airway Continuation: {}".format(line.rstrip()))
-        elif code == "HA":  # Heliport
+            print("CIFPReader.process_file: Unhandled Enroute Airway Continuation: {}".format(record.rstrip()))
+        elif self.code == "HA":  # Heliport
           continue
-        elif code == "HC":  # Helicopter Terminal Waypoint
+        elif self.code == "HC":  # Helicopter Terminal Waypoint
           continue
-        elif code == "HF":  # Heliport SID/STAR/Approach
+        elif self.code == "HF":  # Heliport SID/STAR/Approach
           continue
-        elif code == "HS":  # Heliport Minimum Sector Altitude
+        elif self.code == "HS":  # Heliport Minimum Sector Altitude
           continue
-        elif code == "PA":  # Airport Reference Point
-          # 4.1.7 - this is always the first line a a set of airport data
-          if primary:
-            data = self.parse_airport_primary_record(line) # returns a cf.Point
-          
-            # if we have a point we want, save it
-            if data != None and self.in_roi(data.latitude, data.longitude):
-              self.usa.add_airport(airport.Airport(data))
-          else:
-            print("CIFPReader.process_file: Unhandled Airport Continuation: {}".format(line.rstrip()))
-        
-        elif code == "PC":  # Terminal Waypoint
-          # 4.1.4
-          if primary:
-            data = self.parse_waypoint_primary(line) # returns a Point
+        elif self.code == "PA":  # Airport Reference Point
+          self.process_airport_reference_point(record, self.usa.airports)
+        elif self.code == "PC":  # Terminal Waypoint
+          self.process_airport_point(record, self.usa.airports)
+        elif self.code == "PD":  # Standard Instrument Departure (SID)
+          if self.is_primary(record):
+            data = procedure.ProcedureRecord(record)
             
-            # save the point if this is an airport we are including
-            if self.usa.has_airport(data.airport):
-              self.usa.airports[data.airport].add_waypoint(data)
-          else:
-            print("CIFPReader.process_file: Unhandled Terminal Waypoint Continuation: {}".format(line.rstrip()))
-        
-        elif code == "PD":  # Standard Instrument Departure (SID)
-          if primary:
-            data = procedure.ProcedureRecord(line)
-            
-            # save the point if this is an airport we are including
+            # save the cifp_point if this is an airport we are including
             if self.usa.has_airport(data.airport):
               self.usa.airports[data.airport].add_procedure(data)
           else:
-            print("CIFPReader.process_file: Unhandled SID Continuation: {}".format(line.rstrip()))
+            print("CIFPReader.process_file: Unhandled SID Continuation: {}".format(record.rstrip()))
         
-        elif code == "PE":  # Standard Terminal Arrival (STAR)
-          if primary:
-            data = procedure.ProcedureRecord(line)
+        elif self.code == "PE":  # Standard Terminal Arrival (STAR)
+          if self.is_primary(record):
+            data = procedure.ProcedureRecord(record)
             
-            # save the point if this is an airport we are including
+            # save the cifp_point if this is an airport we are including
             if self.usa.has_airport(data.airport):
               self.usa.airports[data.airport].add_procedure(data)
           else:
-            print("CIFPReader.process_file: Unhandled STAR Continuation: {}".format(line.rstrip()))
+            print("CIFPReader.process_file: Unhandled STAR Continuation: {}".format(record.rstrip()))
         
-        elif code == "PF":  # Instrument Approach
-          if primary:
-            data = procedure.ProcedureRecord(line)
+        elif self.code == "PF":  # Instrument Approach
+          if self.is_primary(record):
+            data = procedure.ProcedureRecord(record)
             
-            # save the point if this is an airport we are including
+            # save the cifp_point if this is an airport we are including
             if self.usa.has_airport(data.airport):
               self.usa.airports[data.airport].add_procedure(data)
           else:
-            data = procedure.ProcedureRecord(line)
+            data = procedure.ProcedureRecord(record)
             continue
         
-        elif code == "PG":  # Runway
-          # 4.1.10
-          if primary:
-            data = self.parse_runway_primary(line) # returns a Point
-            
-            # save the point if this is an airport we are including
-            if self.usa.has_airport(data.airport):
-              self.usa.airports[data.airport].add_runway(data)
-          else:
-            print("CIFPReader.process_file: Unhandled Runway Continuation: {}".format(line.rstrip()))
-        
-        elif code == "PI":  # Localizer/Glideslope
+        elif self.code == "PG":  # Runway
+          self.process_airport_point(record, self.usa.airports)
+        elif self.code == "PI":  # Localizer/Glideslope
           continue
-        elif code == "PN":  # Terminal NDB
-          # 4.1.3
-          if primary:
-            data = self.parse_ndb_primary(line) # returns a cf.Point
-            
-            # save the point if this is an airport we are including
-            if self.usa.has_airport(data.airport):
-              self.usa.airports[data.airport].add_ndb(data)
-          else:
-            print("CIFPReader.process_file: Unhandled NDB Continuation: {}".format(line.rstrip()))
-        
-        elif code == "PP":  # Path Point
+        elif self.code == "PN":  # Terminal NDB
+          self.process_airport_point(record, self.usa.airports)
+        elif self.code == "PP":  # Path Point
           continue
-        elif code == "PS":  # Minimum Sector Altitude
+        elif self.code == "PS":  # Minimum Sector Altitude
           continue
-        elif code == "UC":  # Controlled Airspace
+        elif self.code == "UC":  # Controlled Airspace
           # read a controlled airspace record (4.1.25)
-          if primary:
-            data = airspace.AirspaceRecord(line)
+          if self.is_primary(record):
+            data = airspace.AirspaceRecord(record)
             
             # save the AirspaceRecord if this is an airport we are including
             if self.usa.has_airport(data.airport):
               self.usa.airports[data.airport].add_airspace(data)
           else:
             # not handled for UC
-            print("CIFPReader.process_file: Unhandled UC Continuation Record: {}".format(line.rstrip()))
+            print("CIFPReader.process_file: Unhandled UC Continuation Record: {}".format(record.rstrip()))
         
-        elif code == "UR":  # Restricted Airspace
-          data = airspace.AirspaceRecord(line)
-          if primary:
-            # if we have a point we want, save it
+        elif self.code == "UR":  # Restricted Airspace
+          data = airspace.AirspaceRecord(record)
+          if self.is_primary(record):
+            # if we have a cifp_point we want, save it
             if data != None and self.in_roi(data.latitude, data.longitude):
               self.uc_cr_armed = True
               self.usa.add_airspace(data)
@@ -308,7 +247,7 @@ class CIFPReader:
             if self.uc_cr_armed:
               self.usa.add_airspace(data)
         else:
-          print("CIFPReader.process_file: Unprocessed Record: {} {}".format(code, line))
+          print("CIFPReader.process_file: Unprocessed Record: {} {}".format(self.code, record))
       
     return
     
@@ -320,33 +259,33 @@ class CIFPReader:
       return True 
     return False
   
-  def is_primary(self, section, record):
+  def is_primary(self, record):
     # find the continuation record number:
-    if section == "D ":
+    if self.code == "D ":
       continuation_number = record[21]
-    elif section == "DB":
+    elif self.code == "DB":
       continuation_number = record[21]
-    elif section == "EA":
+    elif self.code == "EA":
       continuation_number = record[21]
-    elif section == "ER":
+    elif self.code == "ER":
       continuation_number = record[38]
-    elif section == "UC":
+    elif self.code == "UC":
       continuation_number = record[24]
-    elif section == "UR":
+    elif self.code == "UR":
       continuation_number = record[24]
-    elif section == "PA":
+    elif self.code == "PA":
       continuation_number = record[21]
-    elif section == "PC":
+    elif self.code == "PC":
       continuation_number = record[21]
-    elif section == "PD":
+    elif self.code == "PD":
       continuation_number = record[38]
-    elif section == "PE":
+    elif self.code == "PE":
       continuation_number = record[38]
-    elif section == "PF":
+    elif self.code == "PF":
       continuation_number = record[38]
-    elif section == "PG":
+    elif self.code == "PG":
       continuation_number = record[21]
-    elif section == "PN":
+    elif self.code == "PN":
       continuation_number = record[21]
     else:
       continuation_number = -999
@@ -355,213 +294,72 @@ class CIFPReader:
       return True
     return False
   
-  def parse_vhf_navaid_primary(self, record):
-    """Parse a section 4.1.2 (p.27) VHF Navaid Record"""
-    # SCAND        ADK   PA011400 DUW                    ADK N51521587W176402739E0070003291     NARMOUNT MOFFETT                 002361703
-    # SLAMD        ANU   TA011450VDHW N17073316W061480060    N17073316W061480060W0150004002     NARV. C. BIRD                    165731707
-    # SPACD        AWK   PW011350VTHW N19171169E166373840    N19171169E166373840E0060000182     NARWAKE ISLAND                   179381901
-    # SSPAD        TUT   NS011250VTHW S14195732W170422980    S14195730W170422980E0120000102     NARPAGO PAGO                     226421605
-    # SUSAD        ABI   K4011370VTHW N32285279W099514843    N32285279W099514843E0100018092     NARABILENE                       227901810
-    # SUSAD        BJC   K2011540VDHW N39544695W105082035    N39544695W105082035E0110057372     NARJEFFCO                        228681605
-    # SUSAD KACKK6 IACK  K6010910 ITW                    IACKN41144628W070043228W0160000120     NARNANTUCKET MEMORIAL            238471807
-    # 123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012
-    #          1         2         3         4         5         6         7         8         9         10        11        12        13
-    if record[27] == "V": # 5.35 (p.88)
-      # VORs only
-      t2 = record[28]
-      if t2 == " ":
-        style = cf.Point.POINT_VOR
-      elif t2 == "D":
-        style = cf.Point.POINT_VORDME
-      elif t2 == "T" or t2 == "M":
-        style = cf.Point.POINT_VORTAC
-      else:
-        print("CIFPReader.parse_vhf_navaid: Unexpected VOR type: {}".format(record))
-        style = None
+  def process_point(self, record, point_set):
+    # is this a primary or continuation record?
+    if self.is_primary(record):
+      # primary record
+      # create a Point from this record
+      point = cp.CIFPPoint(record)
       
-      # now parse the rest of the record
-      vor_ident = record[13:17].rstrip()
-      continuation_count = record[21]
-      frequency = cf.parse_float(record[22:27], 100)
-      latitude = cf.parse_lat(record[32:41])
-      longitude = cf.parse_lon(record[41:51])
-      declination = cf.parse_variation(record[74:79])
-      name = record[93:123].rstrip()
+      # is this a valid cifp_point in our ROI?
+      if point.valid and self.in_roi(point.latitude, point.longitude):
+        # add this cifp_point to our PointSet
+        point_set.add_point(point)
     else:
-      return None
+      # continuation record
+      # create a PointContinuation from this record
+      cr = point.PointContinuation(record)
+      
+      # this will only get added if the primary Point exists
+      point_set.add_continuation(cr)
     
-    return cf.Point(ident=vor_ident,
-                    name=name,
-                    style=style,
-                    latitude=latitude,
-                    longitude=longitude,
-                    continuation_count=continuation_count,
-                    declination=declination,
-                    frequency=frequency)
+    return
   
-  def parse_ndb_primary(self, record):
-    """Parse a section 4.1.3 (p.29) NDB Record"""
-    # DB NDB Navaid 3.2.2.2
-    # SCANDB       ACE   PA002770H  W N59382880W151300099                       E0170           NARKACHEMAK                      003632002
-    # SLAMDB       DDP   TJ003910H HW N18280580W066244461                       W0110           NARDORADO                        166011605
-    # SPACDB       AJA   PG003850H  W N13271270E144441296                       E0020           NARMT MACAJNA                    179711806
-    # SSPADB       LOG   NS002420H MW S14211350W170445620                       E0120           NARLOGOTALA HILL                 226441703
-    # SUSADB       AA    K3003650HOLW N47003259W096485466                       E0040           NARKENIE                         246741805
-    # PN Airport and Heliport Terminal NDB 3.2.4.13
-    # SLAMPNTISXTI ST    TI002410HO W N17413092W064530474                       W0130           NARPESTE                         176801605
-    # SPACPNPHNLPH HN    PH002420HO W N21192970W158025590                       E0110           NAREWABE                         221111410
-    # SUSAPN3J7 K7 VV    K7003530HO W N33384708W083011836                       W0050           NARJUNNE                         439711610
-    # 123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012
-    #          1         2         3         4         5         6         7         8         9         10        11        12        13
-    # identify the style
-    if record[4:6] == "DB":
-      style = cf.Point.POINT_NDB
-    elif record[4:6] == "PN":
-      style = cf.Point.POINT_TERMINAL_NDB
+  def process_airport_reference_point(self, record, airport_dict):
+    # is this a primary or continuation record?
+    if self.is_primary(record):
+      # primary record
+      # create a Point from this record
+      point = cp.CIFPPoint(record)
+      
+      # is this a valid cifp_point in our ROI?
+      if point.valid and self.in_roi(point.latitude, point.longitude):
+        # create the airport
+        airport_dict[point.ident] = airport.Airport(point)
     else:
-      print("CIFPReader.parse_ndb: Unexpected NDB type: {}".format(record))
-      style = None
+      # continuation record
+      # create a PointContinuation from this record
+      cr = cp.CIFPPointContinuation(record)
+      
+      # this will only get added if the primary Point exists
+      if point.ident in airport_dict:
+        airport_dict[point.ident].add_cr(cr)
     
-    # parse the record
-    airport = record[6:10].rstrip() # populated only for terminal NDBs
-    ident = record[13:17].rstrip()
-    continuation_count = record[21]
-    frequency = cf.parse_float(record[22:27], 10)
-    latitude = cf.parse_lat(record[32:41])
-    longitude = cf.parse_lon(record[41:51])
-    declination = cf.parse_variation(record[74:79])
-    name = record[93:123].rstrip()
+    return
+  
+  def process_airport_point(self, record, airport_dict):
+    # is this a primary or continuation record?
+    if self.is_primary(record):
+      # primary record
+      # create a Point from this record
+      point = cp.CIFPPoint(record)
+      
+      # is this airport one we are tracking?
+      if point.airport in airport_dict:
+        airport_dict[point.airport].add_point(point)
 
-    
-    return cf.Point(ident=ident,
-                    name=name,
-                    style=style,
-                    latitude=latitude,
-                    longitude=longitude,
-                    continuation_count=continuation_count,
-                    declination=declination,
-                    frequency=frequency,
-                    airport=airport)
-  
-  def parse_waypoint_primary(self, record):
-    """Parse a section 4.1.4 (p.29) Waypoint Record"""
-    # EA Enroute Waypoint 3.2.3.1
-    # SCANEAENRT   AAMYY PA0    R   H N51301880E171091170                       W0010     NAR           AAMYY                    004572002
-    # SEEUEAENRT   AGURA UH0    W  RH N67275200W168582400                       E0077     NAR           AGURA                    165482002
-    # SLAMEAENRT   ACREW MM0    R   L N25543661W097394533                       E0036     NAR           ACREW                    166082002
-    # SPACEAENRT   AATRE PH0    W  R  N21131105W157551891                       E0094     NAR           AATRE                    179872002
-    # SSPAEAENRT   AADPO NZ0    R   L S14100754W170580312                       E0118     NAR           AADPO                    226461901
-    # SUSAEAENRT   AAALL K60    W  R  N42071268W071083034                       W0145     NAR           AAALL                    252881901
-    # PC Airport Terminal Waypoints 3.2.4.3
-    # SCANP PAAKPACBILNE PA0    W     N52155864W174310737                       E0053     NAR           BILNE                    049292002
-    # SLAMP TISTTICJAQYY TI0    C     N18195582W065053354                       W0137     NAR           JAQYY                    169302002
-    # SPACP PGROPGCCEPOS K20    W     N14100778E145180802                       E0006     NAR           CEPOS                    194721901
-    # SSPAP NSTUNSCAPRAN NZ0    R     S14215480W170455857                       E0119     NAR           APRAN                    226592002
-    # SUSAP 00R K4CAGEVE K40    W     N30373965W094562178                       E0019     NAR           AGEVE                    753642002
-    # SCANP PAAKPACBILNE PA0    W     N52155864W174310737                       E0053     NAR           BILNE                    049292002
-    # 123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012
-    #          1         2         3         4         5         6         7         8         9         10        11        12        13
-    # identify the style
-    if record[4:6] == "EA":
-      style = cf.Point.POINT_ENROUTE_WAYPOINT
-    elif record[4] == "P" and record[12] == "C":
-      style = cf.Point.POINT_TERMINAL_WAYPOINT
     else:
-      print("CIFPReader.parse_waypoint: Unexpected Waypoint type: {}".format(record))
-      style = None
+      # continuation record
+      # create a PointContinuation from this record
+      cr = point.PointContinuation(record)
+      
+      # is this airport one we are tracking?
+      if cr.airport in airport_dict:
+        airport_dict[cr.airport].add_cr(cr)
     
-    # parse the record
-    airport = record[6:10].rstrip()
-    ident = record[13:18].rstrip()
-    continuation_count = record[21]
-    latitude = cf.parse_lat(record[32:41])
-    longitude = cf.parse_lon(record[41:51])
-    declination = cf.parse_variation(record[74:79])
-    name = record[98:123].rstrip()
-
-    
-    return cf.Point(ident=ident,
-                    name=name,
-                    style=style,
-                    latitude=latitude,
-                    longitude=longitude,
-                    continuation_count=continuation_count,
-                    declination=declination,
-                    airport=airport)
+    return
   
-  def parse_airport_primary_record(self, record):
-    """parse an airport primary record (Section 4.1.7) (p.32)
-    
-    record: CIFP string containing a PA record
-    
-    returns: tuple containing:(Airport ICAO Identifier,
-                               Airport Reference Point Latitude,
-                               Airport Reference Point Longitude,
-                               Magnetic Variation (W positive),
-                               Airport Elevation,
-                               Airport Name)"""
-    # PA Airport Reference Points 3.2.4.1
-    # SCANP 00AKPAA        0     025NSN59565600W151413200E014800252         1800018000P    MNAR    LOWELL FIELD                  041982002
-    # SLAMP 02PRTJA        0     020NSN18271200W066220100W012000015                   P    MNAR    CUYLERS                       169231703
-    # SPACP 03N PKA03N     0     024NSN11140000E169510000E009000004                   C    MNAR    UTIRIK                        194471703
-    # SSPAP NSASNSAZ08     0     020NHS14110366W169401209E012000009                   C    MNAR    OFU                           226521703
-    # SUSAP 00AAK3A        0     034NSN38421448W101282608E006003435         1800018000P    MNAR    AERO B RANCH                  753182002
-    # SUSAP KDENK2ADEN     0     160YHN39514200W104402340E008005434         1800018000C    MNAR    DENVER INTL                   599261208
-    # 123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012
-    #          1         2         3         4         5         6         7         8         9         10        11        12        13
-    ident = record[6:10].rstrip()
-    continuation_count = record[21]
-    latitude = cf.parse_lat(record[32:41])
-    longitude = cf.parse_lon(record[41:51])
-    declination = cf.parse_variation(record[51:56])
-    elevation_ft = float(record[56:61])
-    name = record[93:123].rstrip()
-    
-    return cf.Point(ident=ident, 
-                    name=name, 
-                    style=cf.Point.POINT_AIRPORT, 
-                    latitude=latitude, 
-                    longitude=longitude,
-                    continuation_count=continuation_count,
-                    declination=declination, 
-                    elevation_ft=elevation_ft,
-                    airport=ident)
   
-  def parse_runway_primary(self, record):
-    """Parse a section 4.1.10 (p.25) Runway Record"""
-    # PG Airport Runway 3.2.4.7
-    # SCANP 01A PAGRW05    0011760463 N62562477W152162256               02034000050050D                                          042001703
-    # SLAMP TISTTIGRW10    0070001000 N18201272W064590034               00024000055150I                                          169431613
-    # SPACP PGROPGGRW09    0070000900 N14102878E145135249               00586000045150R                                          195061404
-    # SSPAP NSASNSGRW08    0020000860 S14110237W169402216               00009000050060D                                          226531703
-    # SUSAP 00ARK3GRW18    0025361765 N38582010W097360830               01328000050250D                                          753212002
-    # 123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012
-    #          1         2         3         4         5         6         7         8         9         10        11        12        13
-    airport = record[6:10].rstrip()
-    runway = record[13:18]
-    continuation_count = record[21]
-    length = cf.parse_float(record[22:27])
-    bearing = cf.parse_float(record[27:31], 10.0)
-    latitude = cf.parse_lat(record[32:41])
-    longitude = cf.parse_lon(record[41:51])
-    elevation = cf.parse_float(record[66:71])
-    dthreshold = cf.parse_float(record[71:75])
-    tch = cf.parse_float(record[75:77])
-    width = cf.parse_float(record[77:80])
-    
-    return cf.Point(ident=airport, 
-                    name=runway, 
-                    style=cf.Point.POINT_RUNWAY, 
-                    latitude=latitude, 
-                    longitude=longitude, 
-                    continuation_count=continuation_count,
-                    elevation_ft=elevation, 
-                    length_ft=length,
-                    bearing=bearing, 
-                    tch_ft=tch, 
-                    width_ft=width, 
-                    dthreshold_ft=dthreshold, 
-                    airport=airport)
 
 class WaypointsOut:
   def __init__(self, path, cifp_version):
@@ -607,11 +405,11 @@ class WaypointsOut:
   
   
   def add_point(self, point):
-    """add a point to the document
+    """add a cifp_point to the document
     
-    point: Point instance
+    cifp_point: Point instance
     """
-    # build our point with elevation if available
+    # build our cifp_point with elevation if available
     if point.elevation_ft != None:
       # convert to meters
       elevation = 0.3048 * point.elevation_ft
@@ -619,51 +417,51 @@ class WaypointsOut:
     else:
       location = (point.longitude, point.latitude)
     
-    # figure out which kml document this point belongs to and configure the description
+    # figure out which kml document this cifp_point belongs to and configure the description
     description = ''
     identifier = point.ident
-    if point.style == cf.Point.POINT_VOR:
+    if point.style == point.Point.POINT_VOR:
       kml_doc = self.vors
       description += "Name:{}\n".format(point.name)
       description += "Type: VOR\n"
       description += "Frequency:{:.2f} MHz\n".format(point.frequency)
       description += "Declination:{:.1f} degrees\n".format(point.declination)
-    elif point.style == cf.Point.POINT_VORDME:
+    elif point.style == point.Point.POINT_VORDME:
       kml_doc = self.vors
       description += "Name:{}\n".format(point.name)
       description += "Type: VOR/DME\n"
       description += "Frequency:{:.2f} MHz\n".format(point.frequency)
       description += "Declination:{:.1f} degrees\n".format(point.declination)
-    elif point.style == cf.Point.POINT_VORTAC:
+    elif point.style == point.Point.POINT_VORTAC:
       kml_doc = self.vors
       description += "Name:{}\n".format(point.name)
       description += "Type: VORTAC\n"
       description += "Frequency:{:.2f} MHz\n".format(point.frequency)
       description += "Declination:{:.1f} degrees\n".format(point.declination)
-    elif point.style == cf.Point.POINT_NDB:
+    elif point.style == point.Point.POINT_NDB:
       kml_doc = self.ndbs
       description += "Name:{}\n".format(point.name)
       description += "Frequency:{:.0f} kHz\n".format(point.frequency)
       description += "Declination:{:.1f} degrees\n".format(point.declination)
-    elif point.style == cf.Point.POINT_ENROUTE_WAYPOINT:
+    elif point.style == point.Point.POINT_ENROUTE_WAYPOINT:
       kml_doc = self.enroute_waypoints
       description += "Name:{}\n".format(point.name)
       description += "Declination:{:.1f} degrees\n".format(point.declination)
-    elif point.style == cf.Point.POINT_TERMINAL_WAYPOINT:
+    elif point.style == point.Point.POINT_TERMINAL_WAYPOINT:
       kml_doc = self.terminal_waypoints
       description += "Name:{}\n".format(point.name)
       description += "Declination:{:.1f} degrees\n".format(point.declination)
-    elif point.style == cf.Point.POINT_TERMINAL_NDB:
+    elif point.style == point.Point.POINT_TERMINAL_NDB:
       kml_doc = self.terminal_ndbs
       description += "Name:{}\n".format(point.name)
       description += "Frequency:{:.0f} kHz\n".format(point.frequency)
       description += "Declination:{:.1f} degrees\n".format(point.declination)
-    elif point.style == cf.Point.POINT_AIRPORT:
+    elif point.style == point.Point.POINT_AIRPORT:
       kml_doc = self.airports
       description += "Name:{}\n".format(point.name)
       description += "Elevation:{} feet\n".format(point.elevation_ft)
       description += "Declination:{:.1f} degrees\n".format(point.declination)
-    elif point.style == cf.Point.POINT_RUNWAY:
+    elif point.style == point.Point.POINT_RUNWAY:
       kml_doc = self.runways
       identifier = "{}_{}".format(point.airport, point.name)
       description += "Length:{:.0f} feet\n".format(point.length_ft)
@@ -675,10 +473,10 @@ class WaypointsOut:
     else:
       print("Unknown Point Style: {}".format(point))
     
-    # add the point
+    # add the cifp_point
     pnt = kml_doc.newpoint(name=identifier, description=description, coords=[location])
     
-    # configure the point
+    # configure the cifp_point
     if point.elevation_ft != None:
       pnt.lookat = simplekml.LookAt(altitudemode=simplekml.AltitudeMode.absolute,
                                     latitude=point.latitude,
@@ -772,89 +570,7 @@ class ShapesOut:
     
     return
   
-class RunwayProcessor:
-  def __init__(self, runway_writer):
-    """
-    runway_writer: instance of ShapesOut class for writing the runway shapes
-    """
-    self.runway_writer=runway_writer
-    
-    self.done = []
-    
-    return
-    
-  def process_runway(self, runways, airports):
-    """
-    runways: dictionary of RUNWAY namedtuples (airport, runway, length, bearing, latitude, longitude, elevation, dthreshold, tch, width)
-    airports: dictionary of AIRPORT namedtuples (icao_code, latitude, longitude, declination, elevation, name)
-    
-    """
-    for name, data in runways.items():
-         
-      # check if this is a real runway number (not something like N or S, but something like 36 or 18)
-      if len(data.runway.rstrip()) < 4:
-        print("process_runway: skipping {}".format(name))
-        continue
-      
-      # if we already handled this runway (probably from the other side) we are already done
-      if name in self.done:
-        continue 
-      
-      # build the opposite runway name
-      num = int(data.runway[2:4])  # numbers only 29, 07, etc.
-      side = data.runway[4]  # space, L, R, or C
-      op_num = (num+18)%36
-      # if 36 was the answer the above changed it to 0
-      if op_num == 0:
-        op_num = 36
-      if side == "L":
-        op_side = "R"
-      elif side == "R":
-        op_side = "L"
-      else:
-        op_side = side  # space and C stay the same
-      op_runway = "RW{:02d}{}".format(op_num, op_side)
-      op_name = "{}_{}".format(data.airport, op_runway)
-    
-      # save both of these in to our list so we don't create a duplicate
-      self.done.append(name)
-      self.done.append(op_name)
-      
-      # find the opposite end data
-      if op_name in runways:
-        op_data = runways[op_name]
-      else:
-        print("{} not found in runways[], skipping runway".format(op_name))
-        continue
-      
-      # get the runway points
-      arrival_end = (data.latitude, data.longitude)
-      departure_end = (op_data.latitude, op_data.longitude)
-      
-      # get the declination
-      if data.airport in airports:
-        declination = airports[data.airport].declination
-      else:
-        print("{} not found in airports[], skipping runway".format(data.airport))
-        continue
-      
-      # build the description
-      # airport, runway, length, bearing, latitude, longitude, elevation, dthreshold, tch, width
-      description = ""
-      description += "Name:{} {}\n".format(data.airport, data.runway)
-      description += "Length:{:.0f} feet\n".format(data.length)
-      description += "Elevation:{} feet\n".format(data.elevation)
-      description += "Runway Heading (mag):{:.1f} degrees\n".format(data.bearing)
-      description += "Ruway Width:{:.0f} feet\n".format(data.width)
-      description += "Threshold Crossover Height:{} feet\n".format(data.tch)
-      description += "Displaced Threshold Distance:{} feet\n".format(data.dthreshold)
-      
-      shape = maptools.build_runway(arrival_end, departure_end, data.width, data.bearing, declination)
-      
-      self.runway_writer.add_shape(data.airport, data.runway, description, shape, simplekml.Color.yellow, ShapesOut.OUTCOLOR_YELLOW)
-      
-    return
-      
+   
 VERSION = "1.0"
 
 if __name__ == '__main__':
