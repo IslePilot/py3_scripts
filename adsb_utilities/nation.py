@@ -89,28 +89,44 @@ class NationalAirspace:
       return True
     return False
   
+  def get_vor(self, ident):
+    return self.vors.get_point(ident)
   def get_vors(self):
     # get a list of the vors, location, and description
     return self.vors.get_points()
   
+  def get_ndb(self, ident):
+    return self.ndbs.get_point(ident)
   def get_ndbs(self):
     # get a list of the ndbs, location, and description
     return self.ndbs.get_points()
   
+  def get_waypoint(self, ident):
+    return self.enroute_waypoints.get_point(ident)
   def get_waypoints(self):
     # get a list of the enroute waypoints, location, and description
     return self.enroute_waypoints.get_points()
   
   
+  def get_runway(self, airport, rw):
+    return self.airports[airport].runways.get_point(rw)
   def get_runways(self, airport):
     return self.airports[airport].get_runways()
   
+  def get_terminal_waypoint(self, airport, ident):
+    return self.airports[airport].waypoints.get_point(ident)
   def get_terminal_waypoints(self, airport):
     return self.airports[airport].get_waypoints()
   
+  def get_terminal_ndb(self, airport, ident):
+    return self.airports[airport].ndbs.get_point(ident)
   def get_terminal_ndbs(self, airport):
     return self.airports[airport].get_ndbs()
   
+  def build_procedure_tracks(self, airport, ident, proc_type):
+    # set the databases for this airport
+    self.airports[airport].add_nationwide_data(self.vors, self.ndbs, self.enroute_waypoints)
+    return self.airports[airport].build_procedure_tracks(ident, proc_type)
   
   def get_airway(self, route_id, initial_fix=None, final_fix=None, include_end_points=True):
     if route_id in self.enroute_airways:

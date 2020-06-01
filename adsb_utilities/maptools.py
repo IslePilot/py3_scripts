@@ -29,6 +29,7 @@ sys.path.append("..")
 
 import utm
 import math
+import simplekml
 
 def circle(origin, radius_nm):
   """build a list of lat/lon coordinates defining points along a circle
@@ -153,6 +154,79 @@ def build_runway(arrival_end, departure_end, width_ft, bearing, declination):
   
   return points
 
+def build_hold(hold_fix, inbound_course, turn_direction, leg_distance_nm, declination, ground_speed_knots):
+  # convert the hold_fix to UTM
+  fix_utm = utm.from_latlon(*hold_fix)
+  
+  # find the true bearing from the fix
+  bearing = (inbound_course + 180.0 - declination+360.0)%360.0
+  if turn_direction == "R":
+    cross_bearing = (bearing-90.0+360)%360.0
+    clockwise = True
+  else:
+    cross_bearing = (bearing+90.0)%360.0
+    clockwise = False
+  
+  # find the turn radius
+  turn_time = 60.0 # standard rate turn
+  #                 nm/hr              hr/sec        sec
+  distance_nm = (ground_speed_knots * (1.0/3600.0) * turn_time)
+  radius_nm = distance_nm / math.pi
+  radius_m = radius_nm * 1852.0
+  
+  # leg distance
+  leg_distance_m = leg_distance_nm * 1852.0
+  
+  # start building our shape
+  # working backwards
+  pt_a = (fix_utm[0], fix_utm[1])
+  pt_b = (fix_utm[0]+leg_distance_m*math.sin(math.radians(bearing)), fix_utm[1]+leg_distance_m*math.cos(math.radians(bearing)))
+  pt_c = (pt_b[0]+2.0*radius_m*math.sin(math.radians(cross_bearing)), pt_b[1]+2.0*radius_m*math.cos(math.radians(cross_bearing)))
+  pt_d = (pt_a[0]+2.0*radius_m*math.sin(math.radians(cross_bearing)), pt_a[1]+2.0*radius_m*math.cos(math.radians(cross_bearing)))
+  
+  ctr_ad = (pt_a[0]+radius_m*math.sin(math.radians(cross_bearing)), pt_a[1]+radius_m*math.cos(math.radians(cross_bearing)))
+  ctr_bc = (pt_b[0]+radius_m*math.sin(math.radians(cross_bearing)), pt_b[1]+radius_m*math.cos(math.radians(cross_bearing)))
+  
+  # convert our points to lat lon
+  utm_a = utm.to_latlon(*pt_a, fix_utm[2], fix_utm[3], strict=False)
+  utm_b = utm.to_latlon(*pt_b, fix_utm[2], fix_utm[3], strict=False)
+  utm_c = utm.to_latlon(*pt_c, fix_utm[2], fix_utm[3], strict=False)
+  utm_d = utm.to_latlon(*pt_d, fix_utm[2], fix_utm[3], strict=False)
+  utm_ad = utm.to_latlon(*ctr_ad, fix_utm[2], fix_utm[3], strict=False)
+  utm_bc = utm.to_latlon(*ctr_bc, fix_utm[2], fix_utm[3], strict=False)
+  
+  # build the turns
+  turn_ad = arc_path(utm_a, utm_d, utm_ad, radius_nm, clockwise, "holding outbound turn")
+  turn_cb = arc_path(utm_c, utm_b, utm_bc, radius_nm, clockwise, "holding inbound turn")
+  
+  # we have all of our points, build our shape
+  shape = []
+  # add the outbound turn
+  for point in turn_ad:
+    shape.append(point)
+  # add the inbound turn
+  for point in turn_cb:
+    shape.append(point)
+  # add the leg back to the holding fix
+  shape.append(hold_fix)
+  
+  return shape
+  
+def forward(origin, magnetic_course, distance_nm, declination=0.0):
+  # convert to UTM
+  utm_origin = utm.from_latlon(*origin)
+  
+  # get our true bearing
+  bearing = (magnetic_course - declination + 360.0)%360.0
+  
+  # convert our distance to meters
+  distance_m = distance_nm * 1852.0
+  
+  # find our new point
+  utm_new = (utm_origin[0]+distance_m*math.sin(math.radians(bearing)), utm_origin[1]+distance_m*math.cos(math.radians(bearing)))
+  
+  return utm.to_latlon(*utm_new, utm_origin[2], utm_origin[3], strict=False)
+  
 def get_utm_rotation(lat, lon):
   # get the utm for the cifp_point
   p1_easting, p1_northing, zone_number, zone_letter = utm.from_latlon(lat, lon)
@@ -335,27 +409,65 @@ if __name__ == '__main__':
   cepee = dms2deg("N", 39, 58, 54.34, "W", 104, 50, 17.93)
   # AAGEE
   aagee = dms2deg("N", 40, 1, 37.71, "W", 104, 46, 41.74)
+  # CFFNB
+  cffnb = dms2deg("N", 39, 58, 52.83, "W", 104, 46, 43.59)
   
-  arclist1 = arcpoints(cepee, aagee, 2.750, 352.5, 82.5, "R", -8.0)
+  arclist1 = arc_path(cepee, aagee, cffnb, 2.750, True, "arc1")
+  #arclist1 = arcpoints(cepee, aagee, 2.750, 352.5, 82.5, "R", -8.0)
   
   # JABRO
   jabro = dms2deg("N", 40, 1, 37.13, "W", 104, 45, 14.79)
-  
   # JETSN
   jetsn = dms2deg("N", 39, 58, 50.83, "W", 104, 41, 42.36)
+  #CFPQD
+  cfpqd =dms2deg("N", 39, 58, 52.24, "W", 104, 45, 16.70)
   
-  arclist2 = arcpoints(jabro, jetsn, 2.750, 82.5, 172.5, "R", -8.0)
+  arclist2 = arc_path(jabro, jetsn, cfpqd, 2.750, True, "arc2")
+  #arclist2 = arcpoints(jabro, jetsn, 2.750, 82.5, 172.5, "R", -8.0)
   
-  outfile = open("c:\\temp\\test1.csv", "w")
-  outfile.write("latitude,longitude\n")
-  
+  # build the shape
+  shape1 = []
   for point in arclist1:
-    outfile.write("{:.6f},{:.6f}\n".format(point[0], point[1]))
-  
+    shape1.append(point)
   for point in arclist2:
-    outfile.write("{:.6f},{:.6f}\n".format(point[0], point[1]))
+    shape1.append(point)
   
-  outfile.close()
+  # build a hold at SHAATZ
+  shatz = dms2deg("N", 40, 5, 58.57, "W", 104, 58, 30.10)
+  leg_distance_nm = 1.0 * 210.0/60.0
+  holdshape = build_hold(shatz, 203.0, "R", leg_distance_nm, -11.0, 210.0)
+  
+  # build a simple kml file to test
+  kml = simplekml.Kml()
+  kml.document.name = "Maptools Test"
+  
+  # get shape1 coords in kml format
+  coords1 = []
+  for point in shape1:
+    coords1.append((point[1], point[0]))
+  
+  # add the line
+  line1 = kml.newlinestring(name="KDEN H16RZ",
+                            coords = coords1,
+                            altitudemode=simplekml.AltitudeMode.clamptoground)
+  line1.style.linestyle.width = 4
+  line1.style.linestyle.color = simplekml.Color.blue
+  
+  # get shape2 coords in kml format
+  coords2 = []
+  for point in holdshape:
+    coords2.append((point[1], point[0]))
+  
+  # add the line
+  line1 = kml.newlinestring(name="Hold at SHATZ",
+                            coords = coords2,
+                            altitudemode=simplekml.AltitudeMode.clamptoground)
+  line1.style.linestyle.width = 4
+  line1.style.linestyle.color = simplekml.Color.blue
+  
+  kml.save("C:\\Temp\\maptools.kml")
+  
+
   print("Done.")
   
   

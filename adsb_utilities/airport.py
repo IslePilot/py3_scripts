@@ -45,9 +45,9 @@ class Airport:
     self.controlled_airspace = {} # dictionary containing AirspaceShapes
     
     # Procedure Dictionaries (dictionaries of Procedures)
-    self.sids = {}
-    self.stars = {}
-    self.approaches = {}
+    self.sids = {}  # dictionary containing Procedures, key is SID Name i.e. BAYLR6
+    self.stars = {} # dictionary containing Procedures, key is STAR Name i.e. FLATI1
+    self.approaches = {}  # dictionary containing Procedures, key is SID Name i.e. I30R
     
     return 
   
@@ -78,11 +78,23 @@ class Airport:
   
   def add_nationwide_data(self, vors, ndbs, waypoints):
     """add D, DB, and EA data access"""
-    self.vors = vors
-    self.enroute_ndbs = ndbs
-    self.enroute_waypoints = waypoints
+    self.D = vors
+    self.DB = ndbs
+    self.EA = waypoints
     return 
   
+  def build_procedure_tracks(self, ident, proc_type):
+    if proc_type == "SID":
+      return self.sids[ident].build_procedure_shape(self.D, self.DB, self.EA, self.ndbs, self.waypoints, self.runways)
+    elif proc_type == "STAR":
+      return self.stars[ident].build_procedure_shape(self.D, self.DB, self.EA, self.ndbs, self.waypoints, self.runways)
+    elif proc_type == "APPROACH":
+      return self.approaches[ident].build_procedure_shape(self.D, self.DB, self.EA, self.ndbs, self.waypoints, self.runways)
+    
+    return None
+    
+    
+    
   def add_procedure(self, procedure_record):
     if procedure_record.subsection_code == "D":
       # Standard Instrument Departures (SIDS)

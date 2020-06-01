@@ -25,8 +25,14 @@ Revision History:
 """
 
 import cifp_functions as cf
+import maptools as maptools
 
 class Procedure:
+  # Supported Procedures
+  PROCEDURE_STAR = 1
+  PROCEDURE_SID = 2
+  PROCEDURE_APPROACH = 3
+  
   # SID Route Types (PD, HD)
   D_TYPE_ENGINE_OUT_SID = '0'
   D_TYPE_SID_RUNWAY_TRANSITION = '1'
@@ -127,6 +133,9 @@ class Procedure:
                  F_TYPE_MLSBC_APPROACH + \
                  F_TYPE_MISSED_APPROACH
 
+  APP_5_SPEED_KTS = 210.0 # knots (3.5 nm/min)
+  APP_5_RATE_OF_CLIMB_FPNM = 500.0  # note feet/nm
+  
   def __init__(self):
     # these dictionaries each contain a list of ProcedureRecords in order, the key is the transition name
     # SIDS/STARS
@@ -145,6 +154,7 @@ class Procedure:
   def add_procedure_record(self, pr):
     # we need to add this procedure data to the appropriate procedure dictionary
     if pr.subsection_code == "D":
+      self.procedure_type = self.PROCEDURE_SID
       # SID
       # figure out what kind of route type we are dealing with and add this procedure record to the correct dictionary
       if pr.route_type in self.D_RUNWAY_TRANSITIONS:
@@ -165,6 +175,7 @@ class Procedure:
         print("Procedure.add_procedure_record: Unhandled SID route type: {} {} {}".format(pr.airport, pr.procedure_identifier, pr.route_type))
     
     elif pr.subsection_code == "E":
+      self.procedure_type = self.PROCEDURE_STAR
       # STAR
       # figure out what kind of route type we are dealing with and add this procedure record to the correct dictionary
       if pr.route_type in self.E_RUNWAY_TRANSITIONS:
@@ -185,6 +196,7 @@ class Procedure:
         print("Procedure.add_procedure_record: Unhandled STAR route type: {} {} {}".format(pr.airport, pr.procedure_identifier, pr.route_type))
     
     elif pr.subsection_code == "F":
+      self.procedure_type = self.PROCEDURE_APPROACH
       # IAP
       # figure out what kind of route type we are dealing with and add this procedure record to the correct dictionary
       if pr.route_type in self.F_APPROACH_TRANSITIONS:
@@ -200,6 +212,142 @@ class Procedure:
         print("Procedure.add_procedure_record: Unhandled IAP route type: {} {} {}".format(pr.airport, pr.procedure_identifier, pr.route_type))
 
     return
+  
+  def get_fix(self, fix_id, fix_section):
+    if fix_section == "D ": # VHF Navaid
+      return self.d.get_point(fix_id)
+    elif fix_section == "DB": # NDB
+      return self.db.get_point(fix_id)
+    elif fix_section == "EA": # Enroute Waypoint
+      return self.ea.get_point(fix_id)
+    elif fix_section == "PN": # Terminal NDB
+      return self.pn.get_point(fix_id)
+    elif fix_section == "PC": # Terminal Waypoint
+      return self.pc.get_point(fix_id)
+    elif fix_section == "PG": # Runway
+      return self.pg.get_point(fix_id)
+    else:
+      print("Procedure.get_fix: Unhandled fix:{} Section:{}".format(fix_id, fix_section))
+    return None
+  
+  def build_procedure_shape(self, d, db, ea, pn, pc, pg):
+    # save access to the fix databases
+    self.d = d
+    self.db = db
+    self.ea = ea
+    self.pn = pn
+    self.pc = pc
+    self.pg = pg
+    
+    # build each section of the procedure on its own
+    procedure = {}
+    for key, route in self.process_route(self.runway_transitions).items():
+      procedure[key] = route
+    for key, route in self.process_route(self.enroute_transistions).items():
+      procedure[key] = route
+    for key, route in self.process_route(self.common_route).items():
+      procedure[key] = route
+    
+    return procedure
+  
+  def process_route(self, procedure_records):
+    # this is one set of procedure_records for a single procedure (i.e. a set defining a transition)
+    routes = {}
+    
+    # if this is an instrument approach, we want to start at an appropriate fix
+    if self.procedure_type == self.PROCEDURE_APPROACH:
+      armed = False
+    else:
+      armed = True
+    
+    for key, prs in procedure_records.items():
+      routes[key] = []
+      for pr in prs:
+        # get some easier accessors
+        pt = pr.path_and_termination
+        ft = pr.waypoint_description[3]
+        
+        # if we haven't found a start point, is this one?
+        if armed == False:
+          #        IAF        Int Fix       IAF-H        IAF-C         FAF          FAF-C
+          if ft == "A" or ft == "B" or ft == "C" or ft == "D" or ft == "F" or ft == "I":
+            armed = True
+          else:
+            continue
+        
+        if pt == "IF":
+          # Initial Fix - simply add the fix to our route
+          routes[key].append(self.get_fix(pr.fix_identifier, pr.fix_section))
+        elif pt == "TF":
+          # Track to Fix: Point A to Point B via great circle track - simply add the fix to our route
+          routes[key].append(self.get_fix(pr.fix_identifier, pr.fix_section))
+        elif pt == "CF":
+          # Course to Fix: Course to a Fix
+          print("Procedure.process_route: CF path and termination not supported")
+        elif pt == "DF":
+          # Direct to Fix: Present Position to a Fix via great circle track
+          print("Procedure.process_route: DF path and termination not supported")
+        elif pt == "FA":
+          # Fix to an Altitude: Fix A to an altitude via a course
+          print("Procedure.process_route: FA path and termination not supported")
+        elif pt == "FC":
+          # Fix to a Course: Track a course from a fix for a distance
+          print("Procedure.process_route: FC path and termination not supported")
+        elif pt == "FD":
+          # Fix to a DME distance: track a course from a fix to a distance from a DME
+          print("Procedure.process_route: FD path and termination not supported")
+        elif pt == "FM":
+          # Fix to Manual Termination: track a course from a fix until notified by ATC
+          # add a point 1 nm out
+          point = self.get_fix(pr.fix_identifier, pr.fix_section)
+          routes[key].append((maptools.forward(origin=point[0], magnetic_course=pr.magnetic_course, distance_nm=1.0, declination=point[1])))
+        elif pt == "CA":
+          #  Course to an Altitude: track a course to an altitude
+          print("Procedure.process_route: CA path and termination not supported")
+        elif pt == "CD":
+          # Course to a DME Distance: track a course to a distance from a DME
+          print("Procedure.process_route: CD path and termination not supported")
+        elif pt == "CI":
+          # Course to an intercept: track a course to intercept the next leg
+          print("Procedure.process_route: CI path and termination not supported")
+        elif pt == "CR":
+          # Course to a Radial: track a course to intercept a VOR Radial
+          print("Procedure.process_route: CR path and termination not supported")
+        elif pt == "RF":
+          # Constant Radius Arc: constant radius arc from pt A to pt B, center defined
+          print("Procedure.process_route: RF path and termination not supported")
+        elif pt == "AF":
+          # Arc to a Fix: DME arc from a radial to a fix
+          print("Procedure.process_route: AF path and termination not supported")
+        elif pt == "VA":
+          # Heading to an altitude
+          print("Procedure.process_route: VA path and termination not supported")
+        elif pt == "VD":
+          # Heading to a distance from a DME
+          print("Procedure.process_route: VD path and termination not supported")
+        elif pt == "VI":
+          # Heading to an Intercept
+          print("Procedure.process_route: VI path and termination not supported")
+        elif pt == "VM":
+          # Heading to Manual Termination
+          print("Procedure.process_route: VM path and termination not supported")
+        elif pt == "VR":
+          # Heading to intercept a VOR radial
+          print("Procedure.process_route: VR path and termination not supported")
+        elif pt == "PI":
+          # Procedure Turn
+          print("Procedure.process_route: PI path and termination not supported")
+        elif pt == "HA":
+          # Hold to an altitude
+          print("Procedure.process_route: HA path and termination not supported")
+        elif pt == "HF":
+          # Hold to a Fix
+          print("Procedure.process_route: HF path and termination not supported")
+        elif pt == "HM":
+          # Hold to Manual Termination
+          print("Procedure.process_route: HM path and termination not supported")
+      
+    return routes  
 
 class ProcedureRecord:
   def __init__(self, record):
@@ -354,6 +502,21 @@ class ProcedureRecord:
     # SUSAP KEIKK2FVDM-A D      040         0  M     CA                     2030        + 05519                           3  C   752191406
     # SUSAP KEIKK2FVDM-A D      050SHATZK2PC0EY  R   CFYBJC K2      0230013502300070D   + 07200                           3  C   752201310
     # SUSAP KEIKK2FVDM-A D      060SHATZK2PC0EE  R   HM                     2030T010    + 07200                           3  C   752211310
+    # 
+    # SUSAP KBJCK2FI30R  ANSPYR 010NSPYRK2PC0E  A    FC TDD K3      2278234235140016D     07000     18000                 0 PS   294591412
+    # SUSAP KBJCK2FI30R  ANSPYR 020BAAWLK2PC0EE B    CF IBJCK2      1153010035140020PI    07000                           0 PS   294601412
+    # SUSAP KBJCK2FI30R  AROKXX 010ROKXXK2PC0E  A    IF                                             18000210              0-PS   294611412
+    # SUSAP KBJCK2FI30R  AROKXX 020PLAAYK2PC0E       TF                                 + 07000                           0 PS   294621412
+    # SUSAP KBJCK2FI30R  AROKXX 030LAWNGK2PC0E       TF                                   07000                           0 PS   294631412
+    # SUSAP KBJCK2FI30R  AROKXX 040LAWNGK2PC0E       FC TDD K3      2283229324450009D     07000                           0 PS   294641412
+    # SUSAP KBJCK2FI30R  AROKXX 050BAAWLK2PC0EE B    CF IBJCK2      1153010024450020PI    07000                           0 PS   294651412
+    # SUSAP KBJCK2FI30R  I      010BAAWLK2PC0E  I    IF IBJCK2      11530100        PI  I 070000700018000                 0 NS   294661412
+    # SUSAP KBJCK2FI30R  I      020ALIKEK2PC0E  F    CF IBJCK2      1153006029500040PI  H 0700007000        -300BJC   K2D 0 NS   294671412
+    # SUSAP KBJCK2FI30R  I      030RW30RK2PG0GY M    CF IBJCK2      1153001629500043PI    05618             -300          0 NS   294681412
+    # SUSAP KBJCK2FI30R  I      040         0  M     CA                     2953        + 06380                           0 NS   294691412
+    # SUSAP KBJCK2FI30R  I      050         0        VI                     3600                                          0 NS   294701412
+    # SUSAP KBJCK2FI30R  I      060HYGENK2EA0EY      CF FQF K2      3060037930600050D   + 10200                           0 NS   294711412
+    # SUSAP KBJCK2FI30R  I      070HYGENK2EA0EE  R   HM                     3060T010    + 10200                           0 NS   294721412
     # 123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012
     #          1         2         3         4         5         6         7         8         9         10        11        12        13
     self.airport = self.record[6:10].rstrip() # KDEN

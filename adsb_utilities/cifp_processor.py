@@ -64,6 +64,11 @@ class CIFPReader:
   def debug(self):
     # debug test
     #                          Airport       Procedure    
+    # build a simple kml file to test
+    kml = simplekml.Kml()
+    kml.document.name = "CIFP Processor Test"
+    
+    print("=SID =================================")
     for route in self.usa.airports['KDEN'].sids['BAYLR6'].runway_transitions.values():
       for pr in route:
         print("RW {} {} {} {}".format(pr.airport,
@@ -83,27 +88,36 @@ class CIFPReader:
                                       pr.transition_identifier,
                                       pr.fix_identifier))
     
-    print("==================================")
+    print("=STAR =================================")
+    routes = self.usa.build_procedure_tracks('KDEN', 'FLATI1', 'STAR')
     
-    #                          Airport       Procedure      
-    for route in self.usa.airports['KDEN'].stars['FLATI1'].enroute_transistions.values():
-      for pr in route:
-        print("ET {} {} {} {}".format(pr.airport,
-                                      pr.procedure_identifier,
-                                      pr.transition_identifier,
-                                      pr.fix_identifier))
-    for route in self.usa.airports['KDEN'].stars['FLATI1'].common_route.values():
-      for pr in route:
-        print("CR {} {} {} {}".format(pr.airport,
-                                      pr.procedure_identifier,
-                                      pr.transition_identifier,
-                                      pr.fix_identifier))
-    for route in self.usa.airports['KDEN'].stars['FLATI1'].runway_transitions.values():
-      for pr in route:
-        print("RW {} {} {} {}".format(pr.airport,
-                                      pr.procedure_identifier,
-                                      pr.transition_identifier,
-                                      pr.fix_identifier))
+    # create a folder for this STAR
+    star_folder = kml.newfolder(name='FLATI1')
+    track_folder = star_folder.newfolder(name = "Tracks")
+    fix_folder = star_folder.newfolder(name = "Fixes")
+    
+    for key, val in routes.items():
+      coords = []
+      print(key)
+      for pt in val:
+        # put the coords in the kml form
+        print(pt)
+        if len(pt) == 2:
+          coords.append((pt[1], pt[0]))
+        else:
+          coords.append((pt[0][1], pt[0][0]))
+          pnt = fix_folder.newpoint(name=pt[2], coords=[coords[-1]], description=pt[3])
+          pnt.lookat = simplekml.LookAt(latitude=pt[0][0],longitude=pt[0][1], range=15000., heading=0, tilt=0)
+          pnt.style.iconstyle.icon.href = "http://maps.google.com/mapfiles/kml/shapes/placemark_square.png"
+      
+      line = track_folder.newlinestring(name=key, coords=coords)
+      line.style.linestyle.width = 4
+      line.style.linestyle.color = simplekml.Color.blue
+
+
+
+
+
     
     print("==================================")
     
@@ -120,12 +134,7 @@ class CIFPReader:
                                       pr.procedure_identifier,
                                       pr.transition_identifier,
                                       pr.fix_identifier))
-    
-    print("= Airway Test =================================")
-    print(self.usa.get_airway("J60"))
-    print(self.usa.get_airway("J60", "DBL", "DRABS"))
-    print(self.usa.get_airway("J60", "DRABS", "DBL", False))
-    
+
     print("==================================")
     print(self.usa.restrictive_airspace["COUGAR H Section A"].name)
     print(self.usa.restrictive_airspace["COUGAR H Section A"].controlling_agency)
@@ -135,9 +144,28 @@ class CIFPReader:
     print(self.usa.airports['KBKF'].controlled_airspace["Class D Section B"].name)
     print(self.usa.airports['KBKF'].controlled_airspace["Class D Section B"].build_airspace_shape())
     
+    
+    
+    print("= Airway Test =================================")
+    print(self.usa.get_airway("J60"))
+    print(self.usa.get_airway("J60", "DBL", "DRABS"))
+    print(self.usa.get_airway("J60", "DRABS", "DBL", False))
+    
     print("= Airport Point Test =================================")
     print(self.usa.get_runways('KBJC'))
     print(self.usa.get_terminal_waypoints('KBJC'))
+    
+    print("= Individual Point Test =================================")
+    print(self.usa.get_vor("BJC"))
+    print(self.usa.get_ndb("FN"))
+    print(self.usa.get_waypoint("TOMSN"))
+    
+    print(self.usa.get_terminal_ndb("KFNL", "FN"))
+    print(self.usa.get_terminal_waypoint("KBJC", "ALIKE"))
+    print(self.usa.get_runway('KBJC', "RW30R"))
+    
+    kml.save("C:\\Temp\\cifp_processor.kml")
+    
     
     
     return

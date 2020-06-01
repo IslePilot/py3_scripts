@@ -90,6 +90,7 @@ class CIFPPointSet:
       description += "Elevation:{} feet\n".format(self.points[ident].elevation_ft)
       description += "Declination:{:.1f} degrees\n".format(self.points[ident].declination)
     elif self.points[ident].style == CIFPPoint.POINT_RUNWAY:
+      description += "Name:{}\n".format(self.points[ident].name)
       description += "Length:{:.0f} feet\n".format(self.points[ident].length_ft)
       description += "Elevation:{} feet\n".format(self.points[ident].elevation_ft)
       description += "Runway Heading (mag):{:.1f} degrees\n".format(self.points[ident].bearing)
@@ -97,7 +98,7 @@ class CIFPPointSet:
       description += "Threshold Crossover Height:{} feet\n".format(self.points[ident].tch_ft)
       description += "Displaced Threshold Distance:{} feet\n".format(self.points[ident].dthreshold_ft)
     
-    return position, description
+    return position, self.points[ident].declination, self.points[ident].name, description
   
   def get_points(self):
     """return a list of points with details
@@ -147,6 +148,7 @@ class CIFPPointSet:
         description += "Elevation:{} feet\n".format(point.elevation_ft)
         description += "Declination:{:.1f} degrees\n".format(point.declination)
       elif point.style == CIFPPoint.POINT_RUNWAY:
+        description += "Name:{}\n".format(point.name)
         description += "Length:{:.0f} feet\n".format(point.length_ft)
         description += "Elevation:{} feet\n".format(point.elevation_ft)
         description += "Runway Heading (mag):{:.1f} degrees\n".format(point.bearing)
@@ -155,7 +157,7 @@ class CIFPPointSet:
         description += "Displaced Threshold Distance:{} feet\n".format(point.dthreshold_ft)
 
       # add our data to the list
-      point_list.append((key, position, description))
+      point_list.append((key, position, point.name, description))
     
     return point_list
 
@@ -382,8 +384,8 @@ class CIFPPoint:
     self.style = self.POINT_RUNWAY
     
     self.airport = record[6:10].rstrip()
-    self.name = record[13:18]
-    self.ident = self.airport + ' ' + self.name
+    self.ident = record[13:18]
+    self.name = self.airport + ' ' + self.ident
     self.continuation_count = record[21]
     self.length_ft = cf.parse_float(record[22:27])
     self.bearing = cf.parse_float(record[27:31], 10.0)

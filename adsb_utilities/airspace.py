@@ -110,7 +110,7 @@ class AirspaceShape:
           # UC Airspace
           name = "Class {} Section {}".format(self.ar[i].airspace_classification, self.ar[i].multiple_code)
         else:
-          name = "{} Section {}".format(airspace_record.airspace_designation, airspace_record.multiple_code)
+          name = "{} Section {}".format(self.ar[i].airspace_designation, self.ar[i].multiple_code)
         
         # build the arc
         arc = maptools.arc_path(arc_begin, arc_end, arc_center, radius_nm, clockwise, name)
