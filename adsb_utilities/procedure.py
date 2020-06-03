@@ -230,7 +230,7 @@ class Procedure:
       print("Procedure.get_fix: Unhandled fix:{} Section:{}".format(fix_id, fix_section))
     return None
   
-  def build_procedure_shape(self, d, db, ea, pn, pc, pg):
+  def build_procedure_shape(self, d, db, ea, pn, pc, pg, declination, elevation_ft):
     # save access to the fix databases
     self.d = d
     self.db = db
@@ -238,6 +238,8 @@ class Procedure:
     self.pn = pn
     self.pc = pc
     self.pg = pg
+    self.declination = declination
+    self.elevation_ft = elevation_ft
     
     # build each section of the procedure on its own
     procedure = {}
@@ -247,7 +249,9 @@ class Procedure:
       procedure[key] = route
     for key, route in self.process_route(self.common_route).items():
       procedure[key] = route
-    
+    for key, route in self.process_route(self.approach_transition).items():
+      procedure[key] = route
+      
     return procedure
   
   def process_route(self, procedure_records):
@@ -283,10 +287,45 @@ class Procedure:
           routes[key].append(self.get_fix(pr.fix_identifier, pr.fix_section))
         elif pt == "CF":
           # Course to Fix: Course to a Fix
-          print("Procedure.process_route: CF path and termination not supported")
+          # first get the fix
+          fix = self.get_fix(pr.fix_identifier, pr.fix_section)
+          
+          # figure out where we came from by going backwards
+          # the intercept point is defined as a distance and bearing to the station
+          bearing_to = pr.magnetic_course
+          bearing_from = (bearing_to+180.0)%360.0
+          
+          dist = pr.distance
+          new_point = maptools.forward(origin=fix[0], magnetic_course=bearing_from, distance_nm=dist, declination=self.declination)
+          
+          # only add this point if there isn't already a point that is close...maybe we already added something
+          if len(routes[key]) > 0:
+            prev = routes[key][-1]
+            if len(prev) > 2:
+              prev = prev[0]
+            
+            dist = maptools.get_dist_ll(prev, new_point)
+            print("Distance = {}".format(dist))
+            if dist > 500.0:
+              routes[key].append((new_point))
+          # now add the fix
+          routes[key].append(fix)
+          
         elif pt == "DF":
-          # Direct to Fix: Present Position to a Fix via great circle track
-          print("Procedure.process_route: DF path and termination not supported")
+          # Direct to Fix: standard rate turn to great circle direct
+          fix = self.get_fix(pr.fix_identifier, pr.fix_section)
+          pt0 = routes[key][-2]
+          if len(pt0) > 2:
+            pt0 = pt0[0]
+          pt1 = routes[key][-1]
+          if len(pt1) > 2:
+            pt1 = pt1[0]
+          shape = maptools.build_tangent_to_fix(pt0, pt1, fix[0], self.APP_5_SPEED_KTS)
+          # append the points
+          for pt in shape:
+            routes[key].append(pt)
+          # now append the fix
+          routes[key].append(fix)
         elif pt == "FA":
           # Fix to an Altitude: Fix A to an altitude via a course
           print("Procedure.process_route: FA path and termination not supported")
@@ -302,8 +341,19 @@ class Procedure:
           point = self.get_fix(pr.fix_identifier, pr.fix_section)
           routes[key].append((maptools.forward(origin=point[0], magnetic_course=pr.magnetic_course, distance_nm=1.0, declination=point[1])))
         elif pt == "CA":
-          #  Course to an Altitude: track a course to an altitude
-          print("Procedure.process_route: CA path and termination not supported")
+          if pr.route_type in self.F_APPROACHES:
+            # get the previous point as the start of our climb
+            prev = routes[key][-1]
+            if len(prev) > 2:
+              prev = prev[0]
+            
+            # figure how far we go in the climb
+            dz = pr.altitude1 - self.elevation_ft
+            dist = dz / self.APP_5_RATE_OF_CLIMB_FPNM
+            
+            # build our new point
+            new_point = maptools.forward(origin=(prev[0], prev[1]), magnetic_course=pr.magnetic_course, distance_nm=dist, declination=self.declination)
+            routes[key].append((new_point, self.declination, "{}".format(pr.altitude1), "Course to Altitude Point, Position Estimated", pr.altitude1))
         elif pt == "CD":
           # Course to a DME Distance: track a course to a distance from a DME
           print("Procedure.process_route: CD path and termination not supported")
@@ -315,40 +365,127 @@ class Procedure:
           print("Procedure.process_route: CR path and termination not supported")
         elif pt == "RF":
           # Constant Radius Arc: constant radius arc from pt A to pt B, center defined
-          print("Procedure.process_route: RF path and termination not supported")
+          # get our previous point
+          arc_begin = routes[key][-1]
+          if len(arc_begin) > 2:
+            arc_begin = arc_begin[0]
+          
+          # now get our end point and center
+          arc_end = self.get_fix(pr.fix_identifier, pr.fix_section)
+          arc_center = self.get_fix(pr.center_fix, pr.center_section)
+          radius_nm = pr.arc_radius
+          if pr.turn_direction == "R":
+            clockwise = True
+          else:
+            clockwise = False
+          shape = maptools.arc_path(arc_begin, arc_end[0], arc_center[0], radius_nm, clockwise, "RF Fix")
+          for pt in shape:
+            routes[key].append(pt)
+          # add our end point
+          routes[key].append(arc_end)
         elif pt == "AF":
           # Arc to a Fix: DME arc from a radial to a fix
           print("Procedure.process_route: AF path and termination not supported")
         elif pt == "VA":
-          # Heading to an altitude
-          print("Procedure.process_route: VA path and termination not supported")
+          # we have no starting point...this is our very first point
+          if pr.route_type == self.D_TYPE_RNAV_SID_RUNWAY_TRANSITION:
+            # we know this is a SID and it is a runway transition, so lets figure our point from the runway
+            # we have to be careful, the transition name may not be a specific runway...it may also include a B for both runways
+            rw = self.get_departure_end(pr.transition_identifier) # (lat, lon, el_ft, new_ident)
+            
+            # add this point to the list:
+            routes[key].append(((rw[0], rw[1]), self.declination, rw[3], "{} Departure end".format(pr.transition_identifier)))
+            
+            # now figure how far we have to go in the climb
+            dz = pr.altitude1 - rw[2]
+            dist = dz / self.APP_5_RATE_OF_CLIMB_FPNM
+            
+            # # build our new point
+            new_point = maptools.forward(origin=(rw[0], rw[1]), magnetic_course=pr.magnetic_course, distance_nm=dist, declination=self.declination)
+            routes[key].append((new_point, self.declination, "{}".format(pr.altitude1), "Heading to Altitude Point, Position Estimated", pr.altitude1))
+          else:
+            print("Procedure.process_route: VA path and termination not supported")
         elif pt == "VD":
           # Heading to a distance from a DME
           print("Procedure.process_route: VD path and termination not supported")
         elif pt == "VI":
           # Heading to an Intercept
-          print("Procedure.process_route: VI path and termination not supported")
+          if pr.route_type == self.D_TYPE_RNAV_SID_RUNWAY_TRANSITION:
+            # we know this is a SID and it is a runway transition, so lets figure our point from the runway
+            # we have to be careful, the transition name may not be a specific runway...it may also include a B for both runways
+            rw = self.get_departure_end(pr.transition_identifier) # (lat, lon, el_ft, new_ident)
+            
+            # add this point to the list:
+            routes[key].append(((rw[0], rw[1]), self.declination, rw[3], "{} Departure end".format(pr.transition_identifier)))
+            
+            # the next point will be defined in the next line to be processed
+          else:
+            print("Procedure.process_route: VI path and termination not supported")
         elif pt == "VM":
           # Heading to Manual Termination
-          print("Procedure.process_route: VM path and termination not supported")
+          # start with the previous point
+          point = routes[key][-1]
+          new_point = maptools.forward(origin=point[0], magnetic_course=pr.magnetic_course, distance_nm=1.0, declination=point[1])
+          routes[key].append((new_point))
         elif pt == "VR":
           # Heading to intercept a VOR radial
           print("Procedure.process_route: VR path and termination not supported")
         elif pt == "PI":
           # Procedure Turn
           print("Procedure.process_route: PI path and termination not supported")
-        elif pt == "HA":
-          # Hold to an altitude
-          print("Procedure.process_route: HA path and termination not supported")
-        elif pt == "HF":
-          # Hold to a Fix
-          print("Procedure.process_route: HF path and termination not supported")
-        elif pt == "HM":
+        elif pt == "HM" or pt == "HF" or pt == "HA":
           # Hold to Manual Termination
-          print("Procedure.process_route: HM path and termination not supported")
-      
+          hold_fix = self.get_fix(pr.fix_identifier, pr.fix_section)[0]
+          inbound_course = pr.magnetic_course
+          turn_direction = pr.turn_direction
+          if pr.time == None:
+            leg_distance_nm = pr.distance
+          else:
+            leg_distance_nm = pr.time*self.APP_5_SPEED_KTS/60.0
+          
+          shape = maptools.build_hold(hold_fix, inbound_course, turn_direction, leg_distance_nm, self.declination, self.APP_5_SPEED_KTS)
+          for pt in shape:
+            routes[key].append(pt)
     return routes  
 
+  def get_departure_end(self, ident):
+    # is this even a runway
+    if ident[:2] != "RW":
+      return None
+    
+    # get the opposite runway name
+    num = int(ident[2:4])
+    opp_num = (num+18)%36
+    if opp_num == 0:
+      opp_num = 36
+      
+    # build our runway name
+    new_ident = "RW{:02d}".format(opp_num)
+    if ident[4] == "L":
+      new_ident += "R"
+    elif ident[4] == "R":
+      new_ident += "L"
+    else:
+      new_ident += ident[4]
+    
+    # if we have a legal name get the runway data
+    if new_ident[4] != "B":
+      rw = self.pg.get_point(new_ident)
+      latitude = rw[0][0]
+      longitude = rw[0][1]
+      elevation = rw[4]
+      
+    else:
+      # this applies to both runways, find the average position
+      rwl = self.pg.get_point(new_ident[:4]+"L")
+      rwr = self.pg.get_point(new_ident[:4]+"R")
+      latitude = (rwl[0][0]+rwr[0][0])/2.0
+      longitude = (rwl[0][1]+rwr[0][1])/2.0
+      elevation = (rwl[4]+rwr[4])/2.0
+    
+    return latitude, longitude, elevation, new_ident
+
+      
 class ProcedureRecord:
   def __init__(self, record):
     # save the raw data
@@ -546,13 +683,23 @@ class ProcedureRecord:
       self.distance = cf.parse_float(self.record[74:78], 10.0)
     self.nav_section = self.record[79:81]
     self.altitude_type = self.record[82]
-    self.altitude1 = self.record[84:89]
-    self.altitude2 = self.record[89:94]
+    self.altitude1 = self.parse_altitude(self.record[84:89].rstrip())
+    self.altitude2 = self.parse_altitude(self.record[89:94].rstrip())
     self.speed_limit = self.record[99:102]
     self.center_fix = self.record[106:111]
     self.center_section = self.record[114:116]
     
     return
+  
+  def parse_altitude(self, s):
+    if len(s) == 0:
+      return None
+    else:
+      if s[:2] == "FL":
+        alt = int(s[2:])*100
+      else:
+        alt = int(s)
+    return alt
   
   def parse_procedure_continuation_record(self):
     # SUSAP KDENK2FH16RZ H      020JETSNK2PC2W                                                A031A011                      FS   617911310

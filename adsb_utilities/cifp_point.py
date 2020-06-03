@@ -98,7 +98,7 @@ class CIFPPointSet:
       description += "Threshold Crossover Height:{} feet\n".format(self.points[ident].tch_ft)
       description += "Displaced Threshold Distance:{} feet\n".format(self.points[ident].dthreshold_ft)
     
-    return position, self.points[ident].declination, self.points[ident].name, description
+    return position, self.points[ident].declination, self.points[ident].name, description, self.points[ident].elevation_ft
   
   def get_points(self):
     """return a list of points with details
@@ -157,7 +157,7 @@ class CIFPPointSet:
         description += "Displaced Threshold Distance:{} feet\n".format(point.dthreshold_ft)
 
       # add our data to the list
-      point_list.append((key, position, point.name, description))
+      point_list.append((key, position, point.name, description, point.elevation_ft))
     
     return point_list
 

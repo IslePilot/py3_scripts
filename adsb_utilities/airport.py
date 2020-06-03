@@ -36,6 +36,8 @@ class Airport:
     self.reference_point = pa_point
     self.airport = self.reference_point.airport
     self.ident = self.reference_point.ident
+    self.declination = self.reference_point.declination
+    self.elevation_ft = self.reference_point.elevation_ft
             
     # initialize holders
     self.runways = cp.CIFPPointSet()
@@ -85,11 +87,11 @@ class Airport:
   
   def build_procedure_tracks(self, ident, proc_type):
     if proc_type == "SID":
-      return self.sids[ident].build_procedure_shape(self.D, self.DB, self.EA, self.ndbs, self.waypoints, self.runways)
+      return self.sids[ident].build_procedure_shape(self.D, self.DB, self.EA, self.ndbs, self.waypoints, self.runways, self.declination, self.elevation_ft)
     elif proc_type == "STAR":
-      return self.stars[ident].build_procedure_shape(self.D, self.DB, self.EA, self.ndbs, self.waypoints, self.runways)
+      return self.stars[ident].build_procedure_shape(self.D, self.DB, self.EA, self.ndbs, self.waypoints, self.runways, self.declination, self.elevation_ft)
     elif proc_type == "APPROACH":
-      return self.approaches[ident].build_procedure_shape(self.D, self.DB, self.EA, self.ndbs, self.waypoints, self.runways)
+      return self.approaches[ident].build_procedure_shape(self.D, self.DB, self.EA, self.ndbs, self.waypoints, self.runways, self.declination, self.elevation_ft)
     
     return None
     

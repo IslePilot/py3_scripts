@@ -69,72 +69,99 @@ class CIFPReader:
     kml.document.name = "CIFP Processor Test"
     
     print("=SID =================================")
-    for route in self.usa.airports['KDEN'].sids['BAYLR6'].runway_transitions.values():
-      for pr in route:
-        print("RW {} {} {} {}".format(pr.airport,
-                                      pr.procedure_identifier,
-                                      pr.transition_identifier,
-                                      pr.fix_identifier))
-    for route in self.usa.airports['KDEN'].sids['BAYLR6'].common_route.values():
-      for pr in route:
-        print("CR {} {} {} {}".format(pr.airport,
-                                      pr.procedure_identifier,
-                                      pr.transition_identifier,
-                                      pr.fix_identifier))
-    for route in self.usa.airports['KDEN'].sids['BAYLR6'].enroute_transistions.values():
-      for pr in route:
-        print("ET {} {} {} {}".format(pr.airport,
-                                      pr.procedure_identifier,
-                                      pr.transition_identifier,
-                                      pr.fix_identifier))
+    routes = self.usa.build_procedure_tracks('KDEN', 'BAYLR6', 'SID')
     
+    # create a folder for this STAR
+    sid_folder = kml.newfolder(name='BAYLR6')
+    sid_track_folder = sid_folder.newfolder(name = "Tracks")
+    sid_fix_folder = sid_folder.newfolder(name = "Fixes")
+    
+    for key, val in routes.items():
+      coords = []
+      for pt in val:
+        # put the coords in the kml form
+        if len(pt) == 2:
+          coords.append((pt[1], pt[0]))
+        else:
+          coords.append((pt[0][1], pt[0][0]))
+          pnt = sid_fix_folder.newpoint(name=pt[2], coords=[coords[-1]], description=pt[3])
+          pnt.lookat = simplekml.LookAt(latitude=pt[0][0],longitude=pt[0][1], range=15000., heading=0, tilt=0)
+          pnt.style.iconstyle.icon.href = "http://maps.google.com/mapfiles/kml/shapes/placemark_square.png"
+      
+      line = sid_track_folder.newlinestring(name=key, coords=coords)
+      line.style.linestyle.width = 4
+      line.style.linestyle.color = simplekml.Color.red
+
     print("=STAR =================================")
     routes = self.usa.build_procedure_tracks('KDEN', 'FLATI1', 'STAR')
     
     # create a folder for this STAR
     star_folder = kml.newfolder(name='FLATI1')
-    track_folder = star_folder.newfolder(name = "Tracks")
-    fix_folder = star_folder.newfolder(name = "Fixes")
+    star_track_folder = star_folder.newfolder(name = "Tracks")
+    star_fix_folder = star_folder.newfolder(name = "Fixes")
     
     for key, val in routes.items():
       coords = []
-      print(key)
       for pt in val:
         # put the coords in the kml form
-        print(pt)
         if len(pt) == 2:
           coords.append((pt[1], pt[0]))
         else:
           coords.append((pt[0][1], pt[0][0]))
-          pnt = fix_folder.newpoint(name=pt[2], coords=[coords[-1]], description=pt[3])
+          pnt = star_fix_folder.newpoint(name=pt[2], coords=[coords[-1]], description=pt[3])
           pnt.lookat = simplekml.LookAt(latitude=pt[0][0],longitude=pt[0][1], range=15000., heading=0, tilt=0)
           pnt.style.iconstyle.icon.href = "http://maps.google.com/mapfiles/kml/shapes/placemark_square.png"
       
-      line = track_folder.newlinestring(name=key, coords=coords)
+      line = star_track_folder.newlinestring(name=key, coords=coords)
       line.style.linestyle.width = 4
       line.style.linestyle.color = simplekml.Color.blue
 
-
-
-
-
+    print("=Approach =================================")
+    routes = self.usa.build_procedure_tracks('KDEN', 'H16RZ', 'APPROACH')
     
-    print("==================================")
+    # create a folder for this STAR
+    app_folder = kml.newfolder(name='KDEN H16RZ')
+    app_track_folder = app_folder.newfolder(name = "Tracks")
+    app_fix_folder = app_folder.newfolder(name = "Fixes")
     
-    #                          Airport           Procedure      
-    for route in self.usa.airports['KDEN'].approaches['H16RZ'].approach_transition.values():
-      for pr in route:
-        print("AT {} {} {} {}".format(pr.airport,
-                                      pr.procedure_identifier,
-                                      pr.transition_identifier,
-                                      pr.fix_identifier))
-    for route in self.usa.airports['KDEN'].approaches['H16RZ'].common_route.values():
-      for pr in route:
-        print("IP {} {} {} {}".format(pr.airport,
-                                      pr.procedure_identifier,
-                                      pr.transition_identifier,
-                                      pr.fix_identifier))
-
+    for key, val in routes.items():
+      coords = []
+      for pt in val:
+        # put the coords in the kml form
+        if len(pt) == 2:
+          coords.append((pt[1], pt[0]))
+        else:
+          coords.append((pt[0][1], pt[0][0]))
+          pnt = app_fix_folder.newpoint(name=pt[2], coords=[coords[-1]], description=pt[3])
+          pnt.lookat = simplekml.LookAt(latitude=pt[0][0],longitude=pt[0][1], range=15000., heading=0, tilt=0)
+          pnt.style.iconstyle.icon.href = "http://maps.google.com/mapfiles/kml/shapes/placemark_square.png"
+      
+      line = app_track_folder.newlinestring(name=key, coords=coords)
+      line.style.linestyle.width = 4
+      line.style.linestyle.color = simplekml.Color.yellow
+    
+    routes = self.usa.build_procedure_tracks('KEIK', 'VDM-A', 'APPROACH')
+    # create a folder for this STAR
+    app_folder = kml.newfolder(name='KEIK VDM-A')
+    app_track_folder = app_folder.newfolder(name = "Tracks")
+    app_fix_folder = app_folder.newfolder(name = "Fixes")
+    
+    for key, val in routes.items():
+      coords = []
+      for pt in val:
+        # put the coords in the kml form
+        if len(pt) == 2:
+          coords.append((pt[1], pt[0]))
+        else:
+          coords.append((pt[0][1], pt[0][0]))
+          pnt = app_fix_folder.newpoint(name=pt[2], coords=[coords[-1]], description=pt[3])
+          pnt.lookat = simplekml.LookAt(latitude=pt[0][0],longitude=pt[0][1], range=15000., heading=0, tilt=0)
+          pnt.style.iconstyle.icon.href = "http://maps.google.com/mapfiles/kml/shapes/placemark_square.png"
+      
+      line = app_track_folder.newlinestring(name=key, coords=coords)
+      line.style.linestyle.width = 4
+      line.style.linestyle.color = simplekml.Color.yellow
+    
     print("==================================")
     print(self.usa.restrictive_airspace["COUGAR H Section A"].name)
     print(self.usa.restrictive_airspace["COUGAR H Section A"].controlling_agency)

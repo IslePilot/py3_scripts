@@ -154,7 +154,7 @@ def build_runway(arrival_end, departure_end, width_ft, bearing, declination):
   
   return points
 
-def build_hold(hold_fix, inbound_course, turn_direction, leg_distance_nm, declination, ground_speed_knots):
+def build_hold(hold_fix, inbound_course, turn_direction, leg_distance_nm, declination, tas_knots):
   # convert the hold_fix to UTM
   fix_utm = utm.from_latlon(*hold_fix)
   
@@ -168,11 +168,8 @@ def build_hold(hold_fix, inbound_course, turn_direction, leg_distance_nm, declin
     clockwise = False
   
   # find the turn radius
-  turn_time = 60.0 # standard rate turn
-  #                 nm/hr              hr/sec        sec
-  distance_nm = (ground_speed_knots * (1.0/3600.0) * turn_time)
-  radius_nm = distance_nm / math.pi
-  radius_m = radius_nm * 1852.0
+  radius_m = std_rate_radius_m(tas_knots)
+  radius_nm = radius_m/1852.0
   
   # leg distance
   leg_distance_m = leg_distance_nm * 1852.0
@@ -226,6 +223,7 @@ def forward(origin, magnetic_course, distance_nm, declination=0.0):
   utm_new = (utm_origin[0]+distance_m*math.sin(math.radians(bearing)), utm_origin[1]+distance_m*math.cos(math.radians(bearing)))
   
   return utm.to_latlon(*utm_new, utm_origin[2], utm_origin[3], strict=False)
+
   
 def get_utm_rotation(lat, lon):
   # get the utm for the cifp_point
@@ -242,6 +240,98 @@ def get_utm_rotation(lat, lon):
   
   return az
   
+def build_tangent_to_fix(pt0, pt1, fix, tas_knots):
+  """used to build a path from a current point to to a fix when cleared direct to the fix
+  
+  pt0: point before current (lat, lon)
+  pt1: current point (lat, lon)
+  fix: fix to fly to (lat, lon)
+  tas_knots: tas in knots"""
+  
+  # convert the points to utm
+  pt0_utm = utm.from_latlon(*pt0)
+  pt1_utm = utm.from_latlon(*pt1, pt0_utm[2], pt0_utm[3])
+  fix_utm = utm.from_latlon(*fix, pt0_utm[2], pt0_utm[3])
+  
+  # find the turn radius
+  radius_m = std_rate_radius_m(tas_knots)
+  radius_nm = radius_m/1852.0
+  
+  # figure out our current heading
+  heading = get_azimuth(pt0_utm, pt1_utm)
+  
+  # we don't know which way to turn, so there are two possible circles based on left or right turns
+  lbearing = (heading-90.0+360.0)%360.0
+  rbearing = (heading+90.0)%360.0
+  lctr = (pt1_utm[0]+radius_m*math.sin(math.radians(lbearing)), pt1_utm[1]+radius_m*math.cos(math.radians(lbearing)))
+  rctr = (pt1_utm[0]+radius_m*math.sin(math.radians(rbearing)), pt1_utm[1]+radius_m*math.cos(math.radians(rbearing)))
+  
+  # the center closest to the fix will define which way we should turn
+  ldist = get_distance(lctr, fix_utm)
+  rdist = get_distance(rctr, fix_utm)
+  if ldist < rdist:
+    clockwise = False
+    ctr = lctr
+    dist = ldist
+  else:
+    clockwise = True
+    ctr = rctr
+    dist = rdist
+  ctr_ll = utm.to_latlon(*ctr, pt0_utm[2], pt0_utm[3], strict=False)
+  
+  # a line tangent to a circle is perpendicular to its radius at the intersection of the line and the circle,
+  # so we have a right triangle.  There are two triangles actually and we need to figure out which one is right
+  # each triangle has a hypotenuse of dist (the distance from the fix to the center), and a leg of radius r, so
+  # find the flight path distance and the angle from the ctr-fix line
+  ctr_ang = math.degrees(math.acos(radius_m/dist))
+  
+  # the radials to the tangent points are at the azimuth to the fix plus and minus the ctr_ang
+  az = get_azimuth(ctr, fix_utm)
+  az1 = (az-ctr_ang+360.0)%360.0
+  az2 = (az+ctr_ang)%360.0
+  
+  # find our new points
+  tan1 = (ctr[0]+math.sin(math.radians(az1)), ctr[1]+math.cos(math.radians(az1)))
+  tan2 = (ctr[0]+math.sin(math.radians(az2)), ctr[1]+math.cos(math.radians(az2)))
+  
+  # find the heading from the tangent points to the fix
+  heading1 = get_azimuth(tan1, fix_utm)
+  heading2 = get_azimuth(tan2, fix_utm)
+  
+  # at each tangent point, we can get the heading based on the direction of turn, the one that matches the heading
+  # to our fix is the right point
+  if clockwise:
+    tan1_diff = abs((az1+90.0)%360.0 - heading1)
+    tan2_diff = abs((az2+90.0)%360.0 - heading2)
+  else:# counterclockwise
+    tan1_diff = abs((az1-90.0+360.0)%360.0 - heading1)
+    tan2_diff = abs((az2-90.0+360.0)%360.0 - heading2)
+    
+  # the smallest difference identifies the "winner"
+  if tan1_diff < tan2_diff:
+    p2 = utm.to_latlon(*tan1, pt0_utm[2], pt0_utm[3], strict=False)
+  else:
+    p2 = utm.to_latlon(*tan2, pt0_utm[2], pt0_utm[3], strict=False)
+  
+  # all done, construct our curve
+  
+  return arc_path(pt1, p2, ctr_ll, radius_nm, clockwise, "tangent_to_fix") 
+
+def std_rate_radius_m(tas_knots):
+  """compute the radius of a standard rate turn at a given TAS
+  
+  tas_knots: true airspeed in knots
+  
+  returns radius in meters"""
+  # a standard rate turn is at 3 deg/sec, or a 1-minute to complete 180 degrees of turn
+  turn_time_sec = 60.0  # seconds
+  
+  # compute the distance flown in the turn time (half circle)
+  #    meters          nm/hr        hr/sec          sec         m/nm
+  distance_flown_m = tas_knots * (1.0/3600.0) * turn_time_sec * 1852.0
+  
+  # a half circle traces out half a circumference (2*pi*r/2) and is the same as the distance flown above
+  return distance_flown_m / math.pi
   
 def arcpoints(waypoint1, waypoint2, radius_nm, heading1_deg_mag, heading2_deg_mag, turn_direction, variation):
   """build a list of lat/lon coordinates defining points along an arc
@@ -369,6 +459,11 @@ def get_distance(pt1, pt2):
   deast = pt2[0] - pt1[0]
   dnorth = pt2[1] - pt1[1]
   return math.sqrt(deast**2 + dnorth**2)
+
+def get_dist_ll(pt1, pt2):
+  pt1_utm = utm.from_latlon(*pt1)
+  pt2_utm = utm.from_latlon(*pt2, pt1_utm[2], pt1_utm[3])
+  return get_distance(pt1_utm[:2], pt2_utm[:2])
 
 def dms2deg(lathem, latdeg, latmin, latsec, lonhem, londeg, lonmin, lonsec):
   """convert latitude and longitude to decimal degrees with the appropriate sign (+N -S, +E, -W)
