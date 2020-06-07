@@ -33,15 +33,19 @@ import airspace as airspace
 import airport as airport
 import procedure as procedure
 import nation as nation
+import kml_output as kmlout
 
 import simplekml
+
 #import gpxpy
-    
+
+     
 
 class CIFPReader:
     
   def __init__(self, path, cifp_version,  lat_min, lat_max, lon_min, lon_max):
     # save the filename
+    self.outpath = path+'\\'+cifp_version+'\\Processed\\'
     self.filename = path+'\\'+cifp_version+'\\FAACIFP18'
     
     # save our boundaries
@@ -57,10 +61,79 @@ class CIFPReader:
     self.process_file()
     
     # debug testing
-    self.debug()
+    #self.debug()
     
     return
   
+  def build_procedures(self, airport):
+    """ build all procedures (SIDS, STARS, and Approaches) related to an airport"""
+    self.kml = kmlout.KMLOutput(airport, self.outpath+"{}.kml".format(airport))
+    
+    added_data = False
+    # process the STARS
+    stars = self.kml.create_folder("STARS")
+    for name in self.usa.airports[airport].stars.keys():
+      # create a folder for this procedure
+      folder = self.kml.create_folder(name, stars)
+      tracks = self.kml.create_folder("Tracks", folder)
+      fixes = self.kml.create_folder("Fixes", folder)
+      
+      # get the routes
+      routes = self.usa.build_procedure_tracks(airport, name, "STAR")
+      
+      # add to the kml file
+      self.build_output(routes, tracks, fixes, simplekml.Color.red)
+      added_data = True
+    
+    # process the SIDS
+    sids = self.kml.create_folder("SIDS")
+    for name in self.usa.airports[airport].sids.keys():
+      # create a folder for this procedure
+      folder = self.kml.create_folder(name, sids)
+      tracks = self.kml.create_folder("Tracks", folder)
+      fixes = self.kml.create_folder("Fixes", folder)
+      
+      # get the routes
+      routes = self.usa.build_procedure_tracks(airport, name, "SID")
+      
+      # add to the kml file
+      self.build_output(routes, tracks, fixes, simplekml.Color.blue)
+      added_data = True
+    
+    # process the Approaches
+    approaches = self.kml.create_folder("APPROACHES")
+    for name in self.usa.airports[airport].approaches.keys():
+      # create a folder for this procedure
+      folder = self.kml.create_folder(name, approaches)
+      tracks = self.kml.create_folder("Tracks", folder)
+      fixes = self.kml.create_folder("Fixes", folder)
+      
+      # get the routes
+      routes = self.usa.build_procedure_tracks(airport, name, "APPROACH")
+      
+      # add to the kml file
+      self.build_output(routes, tracks, fixes, simplekml.Color.yellow)
+      added_data = True
+    
+    if added_data:
+      self.kml.savefile()
+    return
+  
+  def build_output(self, routes, tracks, fixes, color):
+    for key, val in routes.items():
+      coords = []
+      for pt in val:
+        # put the coords in kml form
+        if pt[2] == None:
+          # this is just a point, add it for the track, but don't create a fix
+          coords.append(pt[0])
+        else:
+          coords.append(pt[0])
+          self.kml.add_point(fixes, pt[2], coords[-1], pt[3])
+      self.kml.add_line(tracks, key, coords, color)
+    
+    return
+        
   def debug(self):
     # debug test
     #                          Airport       Procedure    
@@ -211,11 +284,11 @@ class CIFPReader:
         elif self.code == "AS":  # Grid Minimum Off Route Altitude (MORA)
           continue
         elif self.code == "D ":  # VHF Navaid
-          self.process_point(record, self.usa.vors)
+          self.process_point(record, self.usa.vors, True)
         elif self.code == "DB":  # NDB
-          self.process_point(record, self.usa.ndbs)
+          self.process_point(record, self.usa.ndbs, True)
         elif self.code == "EA":  # Waypoint
-          self.process_point(record, self.usa.enroute_waypoints)
+          self.process_point(record, self.usa.enroute_waypoints, True)
         elif self.code == "ER":  # Enroute Airway
           if self.is_primary(record):
             data = airway.AirwayFix(record) # returns an AirwayFix
@@ -270,7 +343,7 @@ class CIFPReader:
         elif self.code == "PG":  # Runway
           self.process_airport_point(record, self.usa.airports)
         elif self.code == "PI":  # Localizer/Glideslope
-          continue
+          self.process_airport_point(record, self.usa.airports)
         elif self.code == "PN":  # Terminal NDB
           self.process_airport_point(record, self.usa.airports)
         elif self.code == "PP":  # Path Point
@@ -342,6 +415,8 @@ class CIFPReader:
       continuation_number = record[21]
     elif self.code == "PN":
       continuation_number = record[21]
+    elif self.code == "PI":
+      continuation_number = record[21]
     else:
       continuation_number = -999
     
@@ -349,7 +424,7 @@ class CIFPReader:
       return True
     return False
   
-  def process_point(self, record, point_set):
+  def process_point(self, record, point_set, add_all=False):
     # is this a primary or continuation record?
     if self.is_primary(record):
       # primary record
@@ -357,7 +432,7 @@ class CIFPReader:
       point = cp.CIFPPoint(record)
       
       # is this a valid cifp_point in our ROI?
-      if point.valid and self.in_roi(point.latitude, point.longitude):
+      if point.valid and (self.in_roi(point.latitude, point.longitude) or add_all):
         # add this cifp_point to our PointSet
         point_set.add_point(point)
     else:
@@ -401,6 +476,7 @@ class CIFPReader:
       
       # is this airport one we are tracking?
       if point.airport in airport_dict:
+        # include the airport declination in case this is a runway
         airport_dict[point.airport].add_point(point)
 
     else:
@@ -625,7 +701,12 @@ class ShapesOut:
     
     return
   
-   
+
+def process_airport(cifp, airport):
+  print("Processing {} ========================".format(airport))
+  cifp.build_procedures(airport)
+  return
+
 VERSION = "1.0"
 
 if __name__ == '__main__':
@@ -639,6 +720,24 @@ if __name__ == '__main__':
   lon_max = -98.0
   
   cifp = CIFPReader(r"C:\Data\CIFP", "CIFP_200521", lat_min, lat_max, lon_min, lon_max)
+  
+  # build procedures
+  for airport in cifp.usa.airports.keys():
+    process_airport(cifp, airport)
+  
+  #process_airport(cifp, "KDEN")
+  #process_airport(cifp, "KBJC")
+  #process_airport(cifp, "KEIK")
+  #process_airport(cifp, "KLMO")
+  #process_airport(cifp, "KASE")
+  #process_airport(cifp, "KEGE")
+  #process_airport(cifp, "KFNL")
+  #process_airport(cifp, "KGXY")
+  #process_airport(cifp, "KSBS")
+  #process_airport(cifp, "KDDC")
+  #process_airport(cifp, "KGJT")
+  #process_airport(cifp, "KHON")
+  #process_airport(cifp, "KSAF")
   
   """
   runway_processor = RunwayProcessor(runways_out)

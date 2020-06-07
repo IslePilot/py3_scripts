@@ -159,7 +159,9 @@ def build_hold(hold_fix, inbound_course, turn_direction, leg_distance_nm, declin
   fix_utm = utm.from_latlon(*hold_fix)
   
   # find the true bearing from the fix
-  bearing = (inbound_course + 180.0 - declination+360.0)%360.0
+  true_inbound = get_true_hdg(inbound_course, declination, hold_fix)
+  bearing = (true_inbound+180.0)%360.0
+  
   if turn_direction == "R":
     cross_bearing = (bearing-90.0+360)%360.0
     clockwise = True
@@ -208,7 +210,176 @@ def build_hold(hold_fix, inbound_course, turn_direction, leg_distance_nm, declin
   shape.append(hold_fix)
   
   return shape
+
+def build_procedure_turn(fix, course, outbound_course, turn_direction, declination, max_distance):
+  # convert our fix to UTM
+  fix_easting, fix_northing, zone_number, zone_letter = utm.from_latlon(*fix)
   
+  # code for a standard pattern at 210 knots TAS (no wind) to remain within 10 nm (we will verify later)
+  v_knots = 210 # knots
+  v_mps = v_knots*1852.0/3600.0
+  radius_m = v_mps*60.0 / math.pi
+  radius_nm = radius_m/1852.0
+  p0_p1_time = 84 # seconds
+  p2_p3_time = 53 # seconds
+  
+  # get our distances
+  p0_p1_dist = p0_p1_time*v_mps
+  p2_p3_dist = p2_p3_time*v_mps  
+  ctr1_ctr3_dist = 2.0*radius_m/math.cos(math.radians(45.0))
+  
+  # compute the headings we need
+  p0_p1 = get_true_hdg(course, declination, fix)
+  p2_p3 = get_true_hdg(outbound_course, declination, fix)
+  
+  # compute the construction headings
+  if turn_direction == "R":
+    p1_ctr1 = (p0_p1-90.0+360.0)%360.0
+    ctr1_p1 = (p1_ctr1+180.0)%360.0
+    ctr1_p2 = (ctr1_p1-45.0+360.0)%360.0
+    p3_ctr2 = ctr1_p2
+    ctr3_p5 = ctr1_p2
+    ctr3_p6 = ctr1_p1
+    turn1_clockwise = False
+    turn2_clockwise = True
+    turn3_clockwise = True
+  else:
+    p1_ctr1 = (p0_p1+90.0)%360.0
+    ctr1_p1 = (p1_ctr1+180.0)%360.0
+    ctr1_p2 = (ctr1_p1+45.0)%360.0
+    p3_ctr2 = ctr1_p2
+    ctr3_p5 = ctr1_p2
+    ctr3_p6 = ctr1_p1
+    turn1_clockwise = True
+    turn2_clockwise = False
+    turn3_clockwise = False
+  
+  # build our points
+  p0 = (fix_easting, fix_northing)
+  p1 = (p0[0]+p0_p1_dist*math.sin(math.radians(p0_p1)), p0[1]+p0_p1_dist*math.cos(math.radians(p0_p1)))
+  ctr1 = (p1[0]+radius_m*math.sin(math.radians(p1_ctr1)), p1[1]+radius_m*math.cos(math.radians(p1_ctr1)))
+  p2 = (ctr1[0]+radius_m*math.sin(math.radians(ctr1_p2)), ctr1[1]+radius_m*math.cos(math.radians(ctr1_p2)))
+  p3 = (p2[0]+p2_p3_dist*math.sin(math.radians(p2_p3)), p2[1]+p2_p3_dist*math.cos(math.radians(p2_p3)))
+  ctr2 = (p3[0]+radius_m*math.sin(math.radians(p3_ctr2)), p3[1]+radius_m*math.cos(math.radians(p3_ctr2)))
+  p4 = (p3[0]+2.0*radius_m*math.sin(math.radians(p3_ctr2)), p3[1]+2.0*radius_m*math.cos(math.radians(p3_ctr2)))
+  ctr3 = (ctr1[0]+ctr1_ctr3_dist*math.sin(math.radians(p0_p1)), ctr1[1]+ctr1_ctr3_dist*math.cos(math.radians(p0_p1)))
+  p5 = (ctr3[0]+radius_m*math.sin(math.radians(ctr3_p5)), ctr3[1]+radius_m*math.cos(math.radians(ctr3_p5)))
+  p6 =(ctr3[0]+radius_m*math.sin(math.radians(ctr3_p6)), ctr3[1]+radius_m*math.cos(math.radians(ctr3_p6)))
+  
+  # convert to lat/lon for the arc_path call
+  p0_ll = utm.to_latlon(*p0, zone_number, zone_letter, strict=False)
+  p1_ll = utm.to_latlon(*p1, zone_number, zone_letter, strict=False)
+  p2_ll = utm.to_latlon(*p2, zone_number, zone_letter, strict=False)
+  ctr1_ll = utm.to_latlon(*ctr1, zone_number, zone_letter, strict=False)
+  
+  p3_ll = utm.to_latlon(*p3, zone_number, zone_letter, strict=False)
+  p4_ll = utm.to_latlon(*p4, zone_number, zone_letter, strict=False)
+  ctr2_ll = utm.to_latlon(*ctr2, zone_number, zone_letter, strict=False)
+  
+  p5_ll = utm.to_latlon(*p5, zone_number, zone_letter, strict=False)
+  p6_ll = utm.to_latlon(*p6, zone_number, zone_letter, strict=False)
+  ctr3_ll = utm.to_latlon(*ctr3, zone_number, zone_letter, strict=False)
+  
+  # start building our shape
+  shape = []
+  
+  # start at the fix (p0) and head to p1
+  shape.append(p0_ll)
+  shape.append(p1_ll)
+  
+  # turn 45 degrees from p1 to p2
+  t1 = arc_path(p1_ll, p2_ll, ctr1_ll, radius_nm, turn1_clockwise, "Procedure Turn 1")
+  for p_ll in t1:
+    shape.append(p_ll)
+  
+  # turn 180 from p3 to p4
+  t2 = arc_path(p3_ll, p4_ll, ctr2_ll, radius_nm, turn2_clockwise, "Procedure Turn 2")
+  for p_ll in t2:
+    shape.append(p_ll)
+  
+  # turn 45 degrees from p5 to p6
+  t3 = arc_path(p5_ll, p6_ll, ctr3_ll, radius_nm, turn3_clockwise, "Procedrue Turn 3")
+  for p_ll in t3:
+    shape.append(p_ll)
+  
+  # head back to the fix
+  shape.append(p1_ll)
+  
+  return shape
+
+def find_intersection(point, point_bearing, fix, fix_bearing, declination):
+  # convert our locations to UTM
+  f = utm.from_latlon(*fix)
+  p = utm.from_latlon(*point, f[2], f[3])
+  
+  # find our true headings
+  azp = get_true_hdg(point_bearing, declination, point)
+  azf = get_true_hdg(fix_bearing, declination, fix)
+  
+  # to keep things a bit simpler, do all the trig here
+  cp = math.cos(math.radians(azp))
+  sp = math.sin(math.radians(azp))
+  cf = math.cos(math.radians(azf))
+  sf = math.sin(math.radians(azf))
+  
+  # break out our points
+  xp = p[0]
+  yp = p[1]
+  xf = f[0]
+  yf = f[1]
+  
+  # we have two unknowns, the distance from the fix and the distance from the point.
+  # xi = xp+dp*sp, yi = yp+dp*cp
+  # xi = xf+df*sf, yi = yf+df*cf
+  # set the xi equations equal to each other and solve for dp
+  # xp+dp*sp = xf+df*sf
+  # dp = (xf+df*sf-xp)/sp
+  #
+  # set the yi equations equal to each other, substitute dp and solve for df
+  # yp+cp*dp = yf+cf*df
+  # yp+cp*(xf+df*sf-xp)/sp = yf+cf*df
+  # yp + cp*xf/sp + (cp*sf/sp)*df - cp*xp/sp = yf+cf*df
+  # (cp*sf/sp)*df - cf*df = yf - yp - cp*xf/sp + cp*xp/sp
+  # (cp*sf/sp - cf)*df = yf - yp - cp*xf/sp + cp*xp/sp
+  # df = (yf - yp - cp*xf/sp + cp*xp/sp) / (cp*sf/sp - cf)
+  df = (yf - yp - cp*xf/sp + cp*xp/sp) / (cp*sf/sp - cf)
+  dp = (xf+df*sf-xp)/sp
+  
+  xi = xp+dp*sp
+  yi = yp+dp*cp
+  
+  return utm.to_latlon(xi, yi, f[2], f[3], strict=False)
+
+def turn_to_heading(point0, point1, course, declination, clockwise, tas_knots):
+   # convert the points to utm
+  pt0_utm = utm.from_latlon(*point0)
+  pt1_utm = utm.from_latlon(*point1, pt0_utm[2], pt0_utm[3])
+  
+  # find the turn radius
+  radius_m = std_rate_radius_m(tas_knots)
+  radius_nm = radius_m/1852.0
+  
+  # figure out our current heading
+  heading = get_azimuth(pt0_utm, pt1_utm)
+  
+  # find the true course
+  true_course = get_true_hdg(course, declination, point1)
+  
+  # find the center of our circle and then the azimuth and distance from the center to the fix
+  if clockwise:
+    bearing = (heading+90.0)%360.0
+    final_bearing = (true_course-90.0+360.0)%360.0
+  else:
+    bearing = (heading-90.0+360.0)%360.0
+    final_bearing = (true_course+90.0)%360.0
+  
+  ctr = (pt1_utm[0]+radius_m*math.sin(math.radians(bearing)), pt1_utm[1]+radius_m*math.cos(math.radians(bearing)))
+  point2 = (ctr[0]+radius_m*math.sin(math.radians(final_bearing)), ctr[1]+radius_m*math.cos(math.radians(final_bearing)))
+  ctr_ll = utm.to_latlon(*ctr, pt0_utm[2], pt0_utm[3], strict=False)
+  point2_ll = utm.to_latlon(*point2, pt0_utm[2], pt0_utm[3], strict=False)
+  
+  return arc_path(point1, point2_ll, ctr_ll, radius_nm, clockwise, "Turn to Heading")
+
 def forward(origin, magnetic_course, distance_nm, declination=0.0):
   # convert to UTM
   utm_origin = utm.from_latlon(*origin)
@@ -224,7 +395,15 @@ def forward(origin, magnetic_course, distance_nm, declination=0.0):
   
   return utm.to_latlon(*utm_new, utm_origin[2], utm_origin[3], strict=False)
 
+def get_mag_heading(origin, dest, declination):
+  d_utm = utm.from_latlon(dest)
+  o_utm = utm.from_latlon(origin, d_utm[2], d_utm[3])
   
+  # get the heading from origin to destination
+  true_heading = get_azimuth(o_utm, d_utm) - get_utm_rotation(o_utm[0], o_utm[1])
+  
+  return true_heading + declination
+
 def get_utm_rotation(lat, lon):
   # get the utm for the cifp_point
   p1_easting, p1_northing, zone_number, zone_letter = utm.from_latlon(lat, lon)
@@ -239,14 +418,21 @@ def get_utm_rotation(lat, lon):
     az -= 360.0
   
   return az
+def get_true_hdg(mag, dec, point):
+  # True Heading = Magnetic Heading - Declination - UTM
+  return (mag - dec + get_utm_rotation(*point)+360.0)%360.0
+def get_mag_hdg(true, dec, point):
+  # Mag Heading = True Heading + Declination + UTM
+  return (true + dec - get_utm_rotation(*point)+360.0)%360.0
   
-def build_tangent_to_fix(pt0, pt1, fix, tas_knots):
+def build_tangent_to_fix(pt0, pt1, fix, tas_knots, clockwise):
   """used to build a path from a current point to to a fix when cleared direct to the fix
   
   pt0: point before current (lat, lon)
   pt1: current point (lat, lon)
   fix: fix to fly to (lat, lon)
-  tas_knots: tas in knots"""
+  tas_knots: tas in knots
+  clockwise: bool defining if turn is CW (right) or not"""
   
   # convert the points to utm
   pt0_utm = utm.from_latlon(*pt0)
@@ -260,59 +446,52 @@ def build_tangent_to_fix(pt0, pt1, fix, tas_knots):
   # figure out our current heading
   heading = get_azimuth(pt0_utm, pt1_utm)
   
-  # we don't know which way to turn, so there are two possible circles based on left or right turns
-  lbearing = (heading-90.0+360.0)%360.0
-  rbearing = (heading+90.0)%360.0
-  lctr = (pt1_utm[0]+radius_m*math.sin(math.radians(lbearing)), pt1_utm[1]+radius_m*math.cos(math.radians(lbearing)))
-  rctr = (pt1_utm[0]+radius_m*math.sin(math.radians(rbearing)), pt1_utm[1]+radius_m*math.cos(math.radians(rbearing)))
-  
-  # the center closest to the fix will define which way we should turn
-  ldist = get_distance(lctr, fix_utm)
-  rdist = get_distance(rctr, fix_utm)
-  if ldist < rdist:
-    clockwise = False
-    ctr = lctr
-    dist = ldist
+  # find the center of our circle and then the azimuth and distance from the center to the fix
+  if clockwise:
+    bearing = (heading+90.0)%360.0
   else:
-    clockwise = True
-    ctr = rctr
-    dist = rdist
+    bearing = (heading-90.0+360.0)%360.0
+  ctr = (pt1_utm[0]+radius_m*math.sin(math.radians(bearing)), pt1_utm[1]+radius_m*math.cos(math.radians(bearing)))
   ctr_ll = utm.to_latlon(*ctr, pt0_utm[2], pt0_utm[3], strict=False)
+  dist = get_distance(ctr, fix_utm)
+  az = get_azimuth(ctr, fix_utm)
   
   # a line tangent to a circle is perpendicular to its radius at the intersection of the line and the circle,
   # so we have a right triangle.  There are two triangles actually and we need to figure out which one is right
   # each triangle has a hypotenuse of dist (the distance from the fix to the center), and a leg of radius r, so
-  # find the flight path distance and the angle from the ctr-fix line
+  # find the angle from the ctr-fix line and the radials
   ctr_ang = math.degrees(math.acos(radius_m/dist))
   
-  # the radials to the tangent points are at the azimuth to the fix plus and minus the ctr_ang
-  az = get_azimuth(ctr, fix_utm)
+  # the radials to the tangent points are at the ctr-fix azimuth plus and minus the ctr_ang
   az1 = (az-ctr_ang+360.0)%360.0
   az2 = (az+ctr_ang)%360.0
   
   # find our new points
-  tan1 = (ctr[0]+math.sin(math.radians(az1)), ctr[1]+math.cos(math.radians(az1)))
-  tan2 = (ctr[0]+math.sin(math.radians(az2)), ctr[1]+math.cos(math.radians(az2)))
+  tan1 = (ctr[0]+radius_m*math.sin(math.radians(az1)), ctr[1]+radius_m*math.cos(math.radians(az1)))
+  tan2 = (ctr[0]+radius_m*math.sin(math.radians(az2)), ctr[1]+radius_m*math.cos(math.radians(az2)))
   
-  # find the heading from the tangent points to the fix
+  # find the heading to the fix from each of our points
   heading1 = get_azimuth(tan1, fix_utm)
   heading2 = get_azimuth(tan2, fix_utm)
   
+  # if one of these headings is really close to our current heading, just go straight to the point
+  if abs(heading-heading1) < 0.5 or abs(heading-heading1) > 359.5 or abs(heading-heading2) < 0.5 or abs(heading-heading2) > 359.5:
+    return (pt1, fix)
+  
   # at each tangent point, we can get the heading based on the direction of turn, the one that matches the heading
-  # to our fix is the right point
+  # to our fix is the right point.  One point will be 180 degrees out of phase, the other will be our solution.
+  # analyze one to see if it is the solution...if not, use the other.
   if clockwise:
-    tan1_diff = abs((az1+90.0)%360.0 - heading1)
     tan2_diff = abs((az2+90.0)%360.0 - heading2)
   else:# counterclockwise
-    tan1_diff = abs((az1-90.0+360.0)%360.0 - heading1)
     tan2_diff = abs((az2-90.0+360.0)%360.0 - heading2)
-    
-  # the smallest difference identifies the "winner"
-  if tan1_diff < tan2_diff:
+  
+  # the right answer will be around 0 or around 360, the wrong answer will be around 180
+  if 90.0 < tan2_diff and tan2_diff < 270.0:
     p2 = utm.to_latlon(*tan1, pt0_utm[2], pt0_utm[3], strict=False)
   else:
     p2 = utm.to_latlon(*tan2, pt0_utm[2], pt0_utm[3], strict=False)
-  
+
   # all done, construct our curve
   
   return arc_path(pt1, p2, ctr_ll, radius_nm, clockwise, "tangent_to_fix") 
@@ -451,6 +630,7 @@ def arcpoints(waypoint1, waypoint2, radius_nm, heading1_deg_mag, heading2_deg_ma
   return arclist
 
 def get_azimuth(pt1, pt2):
+  """returns the azimuth in the UTM coordinate frame"""
   deast = pt2[0] - pt1[0]
   dnorth = pt2[1] - pt1[1]
   return (math.degrees(math.atan2(deast, dnorth))+360.0)%360.0

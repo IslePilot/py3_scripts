@@ -36,13 +36,13 @@ class Airport:
     self.reference_point = pa_point
     self.airport = self.reference_point.airport
     self.ident = self.reference_point.ident
-    self.declination = self.reference_point.declination
     self.elevation_ft = self.reference_point.elevation_ft
             
     # initialize holders
     self.runways = cp.CIFPPointSet()
     self.ndbs = cp.CIFPPointSet()
     self.waypoints = cp.CIFPPointSet()
+    self.ils = cp.CIFPPointSet()
     
     self.controlled_airspace = {} # dictionary containing AirspaceShapes
     
@@ -62,7 +62,12 @@ class Airport:
       self.waypoints.add_point(point)
     elif point.code == "PG":
       # runways
-      self.runways.add_point(point)      
+      # runways need declination too...use the airport declination
+      point.set_declination(self.reference_point.declination)
+      self.runways.add_point(point)
+    elif point.code == "PI":
+      self.ils.add_point(point)
+           
     return 
   
   def add_cr(self, cr):
@@ -75,6 +80,8 @@ class Airport:
       print("Airport.add_cr: Terminal Waypoint continuation record not supported")
     elif cr.code ==  "PG":
       print("Airport.add_cr: Runway continuation record not supported")
+    elif cr.code == "PI":
+      print("Airport.add_cr: Localizer continuation record not supported")
     
     return 
   
@@ -87,11 +94,14 @@ class Airport:
   
   def build_procedure_tracks(self, ident, proc_type):
     if proc_type == "SID":
-      return self.sids[ident].build_procedure_shape(self.D, self.DB, self.EA, self.ndbs, self.waypoints, self.runways, self.declination, self.elevation_ft)
+      print(ident)
+      return self.sids[ident].build_procedure_shape(self.D, self.DB, self.EA, self.ndbs, self.waypoints, self.runways, self.ils, self.reference_point, self.elevation_ft)
     elif proc_type == "STAR":
-      return self.stars[ident].build_procedure_shape(self.D, self.DB, self.EA, self.ndbs, self.waypoints, self.runways, self.declination, self.elevation_ft)
+      print(ident)
+      return self.stars[ident].build_procedure_shape(self.D, self.DB, self.EA, self.ndbs, self.waypoints, self.runways, self.ils, self.reference_point, self.elevation_ft)
     elif proc_type == "APPROACH":
-      return self.approaches[ident].build_procedure_shape(self.D, self.DB, self.EA, self.ndbs, self.waypoints, self.runways, self.declination, self.elevation_ft)
+      print(ident)
+      return self.approaches[ident].build_procedure_shape(self.D, self.DB, self.EA, self.ndbs, self.waypoints, self.runways, self.ils, self.reference_point, self.elevation_ft)
     
     return None
     
@@ -154,4 +164,6 @@ class Airport:
     # get a list of terminal waypoints, position, and description
     return self.waypoints.get_points()
     
-
+  def get_localizers(self):
+    # get a list of localizers for this airport
+    return self.ils.get_points()

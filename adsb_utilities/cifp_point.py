@@ -47,6 +47,12 @@ class CIFPPointSet:
       print("PointSet.add_continuation: No continuation data defined")
     return
   
+  def get_data(self, ident):
+    if ident not in self.points:
+      return None
+    
+    return self.points[ident]
+  
   def get_point(self, ident):
     if ident not in self.points:
       # point is probably outside the ROI
@@ -98,7 +104,7 @@ class CIFPPointSet:
       description += "Threshold Crossover Height:{} feet\n".format(self.points[ident].tch_ft)
       description += "Displaced Threshold Distance:{} feet\n".format(self.points[ident].dthreshold_ft)
     
-    return position, self.points[ident].declination, self.points[ident].name, description, self.points[ident].elevation_ft
+    return [position, self.points[ident].declination, self.points[ident].ident, description, self.points[ident].elevation_ft]
   
   def get_points(self):
     """return a list of points with details
@@ -173,8 +179,18 @@ class CIFPPoint:
   POINT_TERMINAL_WAYPOINT = 6
   POINT_AIRPORT = 7
   POINT_RUNWAY = 8
+  POINT_LOCALIZER_ONLY = 9
+  POINT_LOCALIZER_CATI = 10
+  POINT_LOCALIZER_CATII = 11
+  POINT_LOCALIZER_CATIII = 12
+  POINT_IGS = 13
+  POINT_LDA_GS = 14
+  POINT_LDA = 15
+  POINT_SDF_GS = 16
+  POINT_SDF = 17
   
   def __init__(self, record):
+    """read and parse a CIFPPoint record"""
     # determine the code for this record
     # identify the type of line
     self.code = cf.section(record)  # valid while we process this record
@@ -217,7 +233,16 @@ class CIFPPoint:
       self.parse_waypoint_primary(record)
     elif self.code == "PC":
       self.parse_waypoint_primary(record)
+    elif self.code == "PI":
+      self.parse_localizer_primary(record)
     
+    return
+  
+  def set_declination(self, declination):
+    if self.declination == None:
+      self.declination = declination
+    else:
+      print("CIFPPoint.set_declination: Attempt to set declination that is already set ignored")
     return
   
   def parse_vhf_navaid_primary(self, record):
@@ -269,6 +294,7 @@ class CIFPPoint:
     # SLAMPNTISXTI ST    TI002410HO W N17413092W064530474                       W0130           NARPESTE                         176801605
     # SPACPNPHNLPH HN    PH002420HO W N21192970W158025590                       E0110           NAREWABE                         221111410
     # SUSAPN3J7 K7 VV    K7003530HO W N33384708W083011836                       W0050           NARJUNNE                         439711610
+    # SUSAPNKFNLK2 FN    K2004000HO W N40214744W104581691                       E0090           NARCOLLN                         440511712
     # 123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012
     #          1         2         3         4         5         6         7         8         9         10        11        12        13
     # identify the style
@@ -401,6 +427,61 @@ class CIFPPoint:
     
     return
 
+  def parse_localizer_primary(self, record):
+    # SUSAP KDENK2IIACX1   010850RW17RN39493182W1043938101725N39513091W1043931421019 09650308300E00806605378                     625201808
+    # SUSAP KDENK2IIAQD3   010850RW35LN39515060W1043936443525N39495276W1043932601020 11010308300E00805705423                     625211808
+    # SUSAP KDENK2IIBXP1   011015RW17LN39494517W1043830281725N39514406W1043823561023 09840308300E00804805326                     625221212
+    # SUSAP KDENK2IIDPP3   011015RW35RN39520394W1043828573525N39500636W1043824771023 11260308300E00805905360                     625231212
+    # SUSAP KDENK2IIDQQ1   011190RW16RN39505678W1044147831725N39533482W1044151281009 10200236300E00805505317                     625241408
+    # SUSAP KDENK2IIDXU3   011190RW34LN39535488W1044145783525N39511760W1044152851013 10900236300E00805505318                     625251506
+    # SUSAP KDENK2IIDZG1   011155RW07 N39502628W1044049060825N39502327W1044322661020 10420308300E00805505341                     625261702
+    # SUSAP KDENK2IIERP1   011155RW25 N39502749W1044349072625N39502241W1044115791023 10580308300E00805505344                     625271212
+    # SUSAP KDENK2IIFUI1   010890RW08 N39523798W1043657040825N39524315W1043929861023 11010308300E00805205342                     625281212
+    # SUSAP KDENK2IIJOY1   010890RW26 N39523930W1043957142626N39524222W1043722391023 09580308300E00805505293                     625291212
+    # SUSAP KDENK2IILTT1   011110RW16LN39514067W1044114001725N39533955W1044117871019 09940308300E00806005347                     625301408
+    # SUSAP KDENK2IIOUF3   011110RW34RN39535944W1044112383525N39520139W1044119011024 10710308300E00805905346                     625311212
+    # 123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012
+    #          1         2         3         4         5         6         7         8         9         10        11        12        13
+    # get the style
+    ils_cat = record[17]
+    if ils_cat == '0':
+      self.style = CIFPPoint.POINT_LOCALIZER_ONLY
+    elif ils_cat == '1':
+      self.style = CIFPPoint.POINT_LOCALIZER_CATI
+    elif ils_cat == '2':
+      self.style = CIFPPoint.POINT_LOCALIZER_CATII
+    elif ils_cat == '3':
+      self.style = CIFPPoint.POINT_LOCALIZER_CATII
+    elif ils_cat == 'I':
+      self.style = CIFPPoint.POINT_IGS
+    elif ils_cat == 'L':
+      self.style = CIFPPoint.POINT_LDA_GS
+    elif ils_cat == 'A':
+      self.style = CIFPPoint.POINT_LDA
+    elif ils_cat == 'S':
+      self.style = CIFPPoint.POINT_SDF_GS
+    elif ils_cat == 'F':
+      self.style = CIFPPoint.POINT_SDF
+    else:
+      print("CIFPPoint.parse_localizer_primary: Unexpected Localizer type: {}:".format(record.rstrip()))
+    
+    # now parse the rest of the record
+    self.airport = record[6:10].rstrip()
+    self.ident = record[13:17].rstrip()
+    self.name = self.airport + ' ' + self.ident
+    self.continuation_count = record[21]
+    self.frequency = cf.parse_float(record[22:27], 100)
+    self.latitude = cf.parse_lat(record[32:41])
+    self.longitude = cf.parse_lon(record[41:51])
+    self.bearing = cf.parse_float(record[51:55], 10.0)
+    self.declination = cf.parse_variation(record[90:95])
+    self.tch_ft = cf.parse_float(record[95:97])
+    self.elevation_ft = cf.parse_float(record[97:102])
+      
+    # good point!
+    self.valid = True
+    
+    return
 
 class CIFPPointContinuation:
   def __init__(self, record):
