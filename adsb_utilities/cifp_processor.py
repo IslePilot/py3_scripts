@@ -42,7 +42,16 @@ import simplekml
      
 
 class CIFPReader:
-    
+  OUTCOLOR_RED = 0
+  OUTCOLOR_ORANGE = 1
+  OUTCOLOR_YELLOW = 2
+  OUTCOLOR_GREEN = 3
+  OUTCOLOR_AQUA = 4
+  OUTCOLOR_BLUE = 5
+  OUTCOLOR_MAGENTA = 6
+  OUTCOLOR_WHITE = 7
+  OUTCOLOR_GRAY = 8
+  
   def __init__(self, path, cifp_version,  lat_min, lat_max, lon_min, lon_max):
     # save the filename
     self.outpath = path+'\\'+cifp_version+'\\Processed\\'
@@ -83,6 +92,10 @@ class CIFPReader:
       
       # add to the kml file
       self.build_output(routes, tracks, fixes, simplekml.Color.red)
+      
+      # build the out and GPX files
+      self.build_pp_files(routes, "STAR", airport, name, self.OUTCOLOR_BLUE)
+      
       added_data = True
     
     # process the SIDS
@@ -99,6 +112,9 @@ class CIFPReader:
       # add to the kml file
       self.build_output(routes, tracks, fixes, simplekml.Color.blue)
       added_data = True
+      
+      # build the out and GPX files
+      self.build_pp_files(routes, "SIDS", airport, name, self.OUTCOLOR_GRAY)
     
     # process the Approaches
     approaches = self.kml.create_folder("APPROACHES")
@@ -114,6 +130,9 @@ class CIFPReader:
       # add to the kml file
       self.build_output(routes, tracks, fixes, simplekml.Color.yellow)
       added_data = True
+      
+      # build the out and GPX files
+      self.build_pp_files(routes, "APPR", airport, name, self.OUTCOLOR_BLUE)
     
     if added_data:
       self.kml.savefile()
@@ -133,7 +152,25 @@ class CIFPReader:
       self.kml.add_line(tracks, key, coords, color)
     
     return
+  
+  def build_pp_files(self, routes, proc_type, airport, name, color):
+    # build the OUT file
+    outfile = open(self.outpath+"{}_{}_{}.out".format(airport, proc_type, name), "w")
+    
+    # add the header and color
+    outfile.write("{{{}_{}_{}}}\n".format(airport, proc_type, name))
+    outfile.write("$TYPE={}\n".format(color))
         
+    for key, val in routes.items():
+      for pt in val:
+        # output
+        outfile.write("{:.6f}+{:.6f}\n".format(*pt[0]))
+      outfile.write("-1\n")
+    
+    outfile.close()
+    return
+      
+    
   def debug(self):
     # debug test
     #                          Airport       Procedure    
@@ -719,33 +756,26 @@ if __name__ == '__main__':
   lon_min = -110.0
   lon_max = -98.0
   
-  cifp = CIFPReader(r"C:\Data\CIFP", "CIFP_200521", lat_min, lat_max, lon_min, lon_max)
+  cifp = CIFPReader(r"C:\Data\CIFP", "CIFP_200716", lat_min, lat_max, lon_min, lon_max)
   
   # build procedures
-  for airport in cifp.usa.airports.keys():
-    process_airport(cifp, airport)
+  #for airport in cifp.usa.airports.keys():
+  #  process_airport(cifp, airport)
   
-  #process_airport(cifp, "KDEN")
-  #process_airport(cifp, "KBJC")
-  #process_airport(cifp, "KEIK")
-  #process_airport(cifp, "KLMO")
-  #process_airport(cifp, "KASE")
-  #process_airport(cifp, "KEGE")
-  #process_airport(cifp, "KFNL")
-  #process_airport(cifp, "KGXY")
-  #process_airport(cifp, "KSBS")
-  #process_airport(cifp, "KDDC")
-  #process_airport(cifp, "KGJT")
-  #process_airport(cifp, "KHON")
-  #process_airport(cifp, "KSAF")
+  process_airport(cifp, "KDEN")
+  process_airport(cifp, "KBJC")
+  process_airport(cifp, "KEIK")
+  process_airport(cifp, "KLMO")
+  process_airport(cifp, "KASE")
+  process_airport(cifp, "KEGE")
+  process_airport(cifp, "KFNL")
+  process_airport(cifp, "KGXY")
+  process_airport(cifp, "KSBS")
+  # process_airport(cifp, "KDDC")
+  # process_airport(cifp, "KGJT")
+  # process_airport(cifp, "KHON")
+  # process_airport(cifp, "KSAF")
   
-  """
-  runway_processor = RunwayProcessor(runways_out)
-  
-  # process the runways
-  runway_processor.process_runway(runways, airports)
-
-  """
   print("Done.")
   
       

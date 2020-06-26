@@ -303,9 +303,14 @@ class Procedure:
     intercept_heading = None
     intercept_heading_count = 0
     
+    missed = False
     for key, prs in procedure_records.items():
       routes[key] = []
       for pr in prs:
+        # if this is an approach and we just completed the last record we are done (we don't include the missed approach)
+        if missed:
+          break
+        
         # get some easier accessors
         pt = pr.path_and_termination
         ft = pr.waypoint_description[3]
@@ -317,6 +322,11 @@ class Procedure:
             armed = True
           else:
             continue
+        
+        if self.procedure_type == self.PROCEDURE_APPROACH:
+          if ft == "M":
+            # this is the last point
+            missed = True
         
         if pt == "IF":
           # Initial Fix - simply add the fix to our route
@@ -622,6 +632,7 @@ class Procedure:
             routes[key].append([new_point, prev[1], "{}".format(pr.altitude1), "Heading to Altitude Point, Position Estimated", pr.altitude1])
             
         elif pt == "VD":
+          print(pr.procedure_identifier, pr.transition_identifier)
           # Heading to a distance from a DME
           # get the previous point
           prev = routes[key][-1]

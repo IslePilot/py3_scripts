@@ -396,11 +396,11 @@ def forward(origin, magnetic_course, distance_nm, declination=0.0):
   return utm.to_latlon(*utm_new, utm_origin[2], utm_origin[3], strict=False)
 
 def get_mag_heading(origin, dest, declination):
-  d_utm = utm.from_latlon(dest)
-  o_utm = utm.from_latlon(origin, d_utm[2], d_utm[3])
+  d_utm = utm.from_latlon(*dest)
+  o_utm = utm.from_latlon(*origin, d_utm[2], d_utm[3])
   
   # get the heading from origin to destination
-  true_heading = get_azimuth(o_utm, d_utm) - get_utm_rotation(o_utm[0], o_utm[1])
+  true_heading = get_azimuth(o_utm, d_utm) - get_utm_rotation(*origin)
   
   return true_heading + declination
 
