@@ -56,12 +56,13 @@ class CIFPPointSet:
   def get_point(self, ident):
     if ident not in self.points:
       # point is probably outside the ROI
-      return None, None
+      return None
     
     position = (self.points[ident].latitude, self.points[ident].longitude)
     
     # build the description
     description = ""
+    heading = None
     if self.points[ident].style == CIFPPoint.POINT_VOR:
       description += "Name:{}\n".format(self.points[ident].name)
       description += "Type: VOR\n"
@@ -103,8 +104,9 @@ class CIFPPointSet:
       description += "Ruway Width:{:.0f} feet\n".format(self.points[ident].width_ft)
       description += "Threshold Crossover Height:{} feet\n".format(self.points[ident].tch_ft)
       description += "Displaced Threshold Distance:{} feet\n".format(self.points[ident].dthreshold_ft)
+      heading = self.points[ident].bearing
     
-    return [position, self.points[ident].declination, self.points[ident].ident, description, self.points[ident].elevation_ft]
+    return cf.ProcedureFix(position, self.points[ident].declination, self.points[ident].ident, description, self.points[ident].elevation_ft, heading)
   
   def get_points(self):
     """return a list of points with details

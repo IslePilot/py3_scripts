@@ -74,7 +74,7 @@ class CIFPReader:
     
     return
   
-  def build_procedures(self, airport):
+  def build_procedures(self, airport, include_missed):
     """ build all procedures (SIDS, STARS, and Approaches) related to an airport"""
     self.kml = kmlout.KMLOutput(airport, self.outpath+"{}.kml".format(airport))
     
@@ -125,7 +125,7 @@ class CIFPReader:
       fixes = self.kml.create_folder("Fixes", folder)
       
       # get the routes
-      routes = self.usa.build_procedure_tracks(airport, name, "APPROACH")
+      routes = self.usa.build_procedure_tracks(airport, name, "APPROACH", include_missed)
       
       # add to the kml file
       self.build_output(routes, tracks, fixes, simplekml.Color.yellow)
@@ -143,12 +143,12 @@ class CIFPReader:
       coords = []
       for pt in val:
         # put the coords in kml form
-        if pt[2] == None:
+        if pt.ident == None:
           # this is just a point, add it for the track, but don't create a fix
-          coords.append(pt[0])
+          coords.append(pt.latlon)
         else:
-          coords.append(pt[0])
-          self.kml.add_point(fixes, pt[2], coords[-1], pt[3])
+          coords.append(pt.latlon)
+          self.kml.add_point(fixes, pt.ident, coords[-1], pt.description)
       self.kml.add_line(tracks, key, coords, color)
     
     return
@@ -161,15 +161,14 @@ class CIFPReader:
     outfile.write("{{{}_{}_{}}}\n".format(airport, proc_type, name))
     outfile.write("$TYPE={}\n".format(color))
         
-    for key, val in routes.items():
+    for _, val in routes.items():
       for pt in val:
         # output
-        outfile.write("{:.6f}+{:.6f}\n".format(*pt[0]))
+        outfile.write("{:.6f}+{:.6f}\n".format(*pt.latlon))
       outfile.write("-1\n")
     
     outfile.close()
     return
-      
     
   def debug(self):
     # debug test
@@ -739,9 +738,9 @@ class ShapesOut:
     return
   
 
-def process_airport(cifp, airport):
+def process_airport(cifp, airport, include_missed):
   print("Processing {} ========================".format(airport))
-  cifp.build_procedures(airport)
+  cifp.build_procedures(airport, include_missed)
   return
 
 VERSION = "1.0"
@@ -758,23 +757,24 @@ if __name__ == '__main__':
   
   cifp = CIFPReader(r"C:\Data\CIFP", "CIFP_200716", lat_min, lat_max, lon_min, lon_max)
   
-  # build procedures
+  # build all procedures
   #for airport in cifp.usa.airports.keys():
   #  process_airport(cifp, airport)
   
-  process_airport(cifp, "KDEN")
-  process_airport(cifp, "KBJC")
-  process_airport(cifp, "KEIK")
-  process_airport(cifp, "KLMO")
-  process_airport(cifp, "KASE")
-  process_airport(cifp, "KEGE")
-  process_airport(cifp, "KFNL")
-  process_airport(cifp, "KGXY")
-  process_airport(cifp, "KSBS")
-  # process_airport(cifp, "KDDC")
-  # process_airport(cifp, "KGJT")
-  # process_airport(cifp, "KHON")
-  # process_airport(cifp, "KSAF")
+  # build select procedures
+  process_airport(cifp, "KDEN", False)
+  process_airport(cifp, "KBJC", False)
+  process_airport(cifp, "KEIK", False)
+  process_airport(cifp, "KLMO", False)
+  process_airport(cifp, "KASE", False)
+  process_airport(cifp, "KEGE", False)
+  process_airport(cifp, "KFNL", False)
+  process_airport(cifp, "KGXY", False)
+  process_airport(cifp, "KSBS", False)
+  #process_airport(cifp, "KDDC", False)
+  #process_airport(cifp, "KGJT", False)
+  #process_airport(cifp, "KHON", False)
+  #process_airport(cifp, "KSAF", False)
   
   print("Done.")
   

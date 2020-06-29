@@ -350,33 +350,30 @@ def find_intersection(point, point_bearing, fix, fix_bearing, declination):
   
   return utm.to_latlon(xi, yi, f[2], f[3], strict=False)
 
-def turn_to_heading(point0, point1, course, declination, clockwise, tas_knots):
-   # convert the points to utm
-  pt0_utm = utm.from_latlon(*point0)
-  pt1_utm = utm.from_latlon(*point1, pt0_utm[2], pt0_utm[3])
+def turn_to_heading(point1, current_heading, final_heading, declination, clockwise, tas_knots):
+  # convert the points to utm
+  pt1_utm = utm.from_latlon(*point1)
   
   # find the turn radius
   radius_m = std_rate_radius_m(tas_knots)
   radius_nm = radius_m/1852.0
   
-  # figure out our current heading
-  heading = get_azimuth(pt0_utm, pt1_utm)
-  
   # find the true course
-  true_course = get_true_hdg(course, declination, point1)
+  true_heading = get_true_hdg(current_heading, declination, point1)
+  true_course = get_true_hdg(final_heading, declination, point1)
   
   # find the center of our circle and then the azimuth and distance from the center to the fix
   if clockwise:
-    bearing = (heading+90.0)%360.0
+    bearing = (true_heading+90.0)%360.0
     final_bearing = (true_course-90.0+360.0)%360.0
   else:
-    bearing = (heading-90.0+360.0)%360.0
+    bearing = (true_heading-90.0+360.0)%360.0
     final_bearing = (true_course+90.0)%360.0
   
   ctr = (pt1_utm[0]+radius_m*math.sin(math.radians(bearing)), pt1_utm[1]+radius_m*math.cos(math.radians(bearing)))
   point2 = (ctr[0]+radius_m*math.sin(math.radians(final_bearing)), ctr[1]+radius_m*math.cos(math.radians(final_bearing)))
-  ctr_ll = utm.to_latlon(*ctr, pt0_utm[2], pt0_utm[3], strict=False)
-  point2_ll = utm.to_latlon(*point2, pt0_utm[2], pt0_utm[3], strict=False)
+  ctr_ll = utm.to_latlon(*ctr, pt1_utm[2], pt1_utm[3], strict=False)
+  point2_ll = utm.to_latlon(*point2, pt1_utm[2], pt1_utm[3], strict=False)
   
   return arc_path(point1, point2_ll, ctr_ll, radius_nm, clockwise, "Turn to Heading")
 
@@ -425,26 +422,23 @@ def get_mag_hdg(true, dec, point):
   # Mag Heading = True Heading + Declination + UTM
   return (true + dec - get_utm_rotation(*point)+360.0)%360.0
   
-def build_tangent_to_fix(pt0, pt1, fix, tas_knots, clockwise):
+def build_tangent_to_fix(pt1, heading, fix, tas_knots, clockwise):
   """used to build a path from a current point to to a fix when cleared direct to the fix
   
-  pt0: point before current (lat, lon)
   pt1: current point (lat, lon)
+  heading: current heading
   fix: fix to fly to (lat, lon)
   tas_knots: tas in knots
   clockwise: bool defining if turn is CW (right) or not"""
   
   # convert the points to utm
-  pt0_utm = utm.from_latlon(*pt0)
-  pt1_utm = utm.from_latlon(*pt1, pt0_utm[2], pt0_utm[3])
-  fix_utm = utm.from_latlon(*fix, pt0_utm[2], pt0_utm[3])
+  fix_utm = utm.from_latlon(*fix)
+  pt1_utm = utm.from_latlon(*pt1, fix_utm[2], fix_utm[3])
+  
   
   # find the turn radius
   radius_m = std_rate_radius_m(tas_knots)
   radius_nm = radius_m/1852.0
-  
-  # figure out our current heading
-  heading = get_azimuth(pt0_utm, pt1_utm)
   
   # find the center of our circle and then the azimuth and distance from the center to the fix
   if clockwise:
@@ -452,7 +446,7 @@ def build_tangent_to_fix(pt0, pt1, fix, tas_knots, clockwise):
   else:
     bearing = (heading-90.0+360.0)%360.0
   ctr = (pt1_utm[0]+radius_m*math.sin(math.radians(bearing)), pt1_utm[1]+radius_m*math.cos(math.radians(bearing)))
-  ctr_ll = utm.to_latlon(*ctr, pt0_utm[2], pt0_utm[3], strict=False)
+  ctr_ll = utm.to_latlon(*ctr, fix_utm[2], fix_utm[3], strict=False)
   dist = get_distance(ctr, fix_utm)
   az = get_azimuth(ctr, fix_utm)
   
@@ -488,9 +482,9 @@ def build_tangent_to_fix(pt0, pt1, fix, tas_knots, clockwise):
   
   # the right answer will be around 0 or around 360, the wrong answer will be around 180
   if 90.0 < tan2_diff and tan2_diff < 270.0:
-    p2 = utm.to_latlon(*tan1, pt0_utm[2], pt0_utm[3], strict=False)
+    p2 = utm.to_latlon(*tan1, fix_utm[2], fix_utm[3], strict=False)
   else:
-    p2 = utm.to_latlon(*tan2, pt0_utm[2], pt0_utm[3], strict=False)
+    p2 = utm.to_latlon(*tan2, fix_utm[2], fix_utm[3], strict=False)
 
   # all done, construct our curve
   

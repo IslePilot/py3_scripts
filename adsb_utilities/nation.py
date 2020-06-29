@@ -123,10 +123,10 @@ class NationalAirspace:
   def get_terminal_ndbs(self, airport):
     return self.airports[airport].get_ndbs()
   
-  def build_procedure_tracks(self, airport, ident, proc_type):
+  def build_procedure_tracks(self, airport, ident, proc_type, include_missed=True):
     # set the databases for this airport
     self.airports[airport].add_nationwide_data(self.vors, self.ndbs, self.enroute_waypoints)
-    return self.airports[airport].build_procedure_tracks(ident, proc_type)
+    return self.airports[airport].build_procedure_tracks(ident, proc_type, include_missed)
   
   def get_airway(self, route_id, initial_fix=None, final_fix=None, include_end_points=True):
     if route_id in self.enroute_airways:

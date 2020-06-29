@@ -92,16 +92,16 @@ class Airport:
     self.EA = waypoints
     return 
   
-  def build_procedure_tracks(self, ident, proc_type):
+  def build_procedure_tracks(self, ident, proc_type, include_missed):
     if proc_type == "SID":
       print(ident)
-      return self.sids[ident].build_procedure_shape(self.D, self.DB, self.EA, self.ndbs, self.waypoints, self.runways, self.ils, self.reference_point, self.elevation_ft)
+      return self.sids[ident].build_procedure_shape(self.D, self.DB, self.EA, self.ndbs, self.waypoints, self.runways, self.ils, self.reference_point, self.elevation_ft, include_missed)
     elif proc_type == "STAR":
       print(ident)
-      return self.stars[ident].build_procedure_shape(self.D, self.DB, self.EA, self.ndbs, self.waypoints, self.runways, self.ils, self.reference_point, self.elevation_ft)
+      return self.stars[ident].build_procedure_shape(self.D, self.DB, self.EA, self.ndbs, self.waypoints, self.runways, self.ils, self.reference_point, self.elevation_ft, include_missed)
     elif proc_type == "APPROACH":
       print(ident)
-      return self.approaches[ident].build_procedure_shape(self.D, self.DB, self.EA, self.ndbs, self.waypoints, self.runways, self.ils, self.reference_point, self.elevation_ft)
+      return self.approaches[ident].build_procedure_shape(self.D, self.DB, self.EA, self.ndbs, self.waypoints, self.runways, self.ils, self.reference_point, self.elevation_ft, include_missed)
     
     return None
     

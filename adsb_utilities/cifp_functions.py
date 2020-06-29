@@ -27,6 +27,16 @@ from collections import namedtuple
 
 SECTIONS = namedtuple('SECTIONS', 'area_code, section_code, subsection_code')
 
+class ProcedureFix:
+  def __init__(self, latlon, declination, ident, description, altitude, heading=None):
+    self.latlon = latlon
+    self.declination = declination
+    self.ident = ident
+    self.description = description
+    self.altitude = altitude
+    self.heading = heading
+    return 
+  
 # basic CIFP Processing functions
 def get_record_info(record):
   """determine the record classification information

@@ -252,16 +252,16 @@ class Procedure:
     elif fix_section == "PI": # ILS
       return self.pi.get_point(fix_id)
     elif fix_section == "PA": # Airport Reference
-      return [(self.pa.latitude, self.pa.longitude), 
-              self.pa.declination, 
-              self.pa.ident, 
-              self.pa.name, 
-              self.pa.elevation_ft]
+      return cf.ProcedureFix((self.pa.latitude, self.pa.longitude), 
+                              self.pa.declination, 
+                              self.pa.ident, 
+                              self.pa.name, 
+                              self.pa.elevation_ft)
     else:
       print("Procedure.get_fix: Unhandled fix:{} Section:{}".format(fix_id, fix_section))
     return None
   
-  def build_procedure_shape(self, d, db, ea, pn, pc, pg, pi, pa, elevation_ft):
+  def build_procedure_shape(self, d, db, ea, pn, pc, pg, pi, pa, elevation_ft, include_missed):
     # save access to the fix databases
     self.d = d
     self.db = db
@@ -275,22 +275,22 @@ class Procedure:
     
     # build each section of the procedure on its own
     procedure = {}
-    for key, route in self.process_route(self.runway_transitions).items():
+    for key, route in self.process_route(self.runway_transitions, include_missed).items():
       print("     "+key)
       procedure[key] = route
-    for key, route in self.process_route(self.enroute_transistions).items():
+    for key, route in self.process_route(self.enroute_transistions, include_missed).items():
       print("     "+key)
       procedure[key] = route
-    for key, route in self.process_route(self.common_route).items():
+    for key, route in self.process_route(self.common_route, include_missed).items():
       print("     "+key)
       procedure[key] = route
-    for key, route in self.process_route(self.approach_transition).items():
+    for key, route in self.process_route(self.approach_transition, include_missed).items():
       print("     "+key)
       procedure[key] = route
       
     return procedure
   
-  def process_route(self, procedure_records):
+  def process_route(self, procedure_records, include_missed):
     # this is one set of procedure_records for a single procedure (i.e. a set defining a transition)
     routes = {}
     
@@ -300,20 +300,23 @@ class Procedure:
     else:
       armed = True
     
-    intercept_heading = None
-    intercept_heading_count = 0
-    
-    missed = False
     for key, prs in procedure_records.items():
       routes[key] = []
+      end_of_procedure = False  # only used when missed approach is NOT requested
       for pr in prs:
-        # if this is an approach and we just completed the last record we are done (we don't include the missed approach)
-        if missed:
+        # should we stop processing?
+        if end_of_procedure:
           break
         
-        # get some easier accessors
+        # get some easy to use accessors
         pt = pr.path_and_termination
         ft = pr.waypoint_description[3]
+        
+        # if this is the final point before the missed approach, should we continue after this point?
+        if self.procedure_type == self.PROCEDURE_APPROACH:
+          if ft == "M" and not include_missed:
+            # this is the last point
+            end_of_procedure = True
         
         # if we haven't found a start point, is this one?
         if armed == False:
@@ -323,91 +326,126 @@ class Procedure:
           else:
             continue
         
-        if self.procedure_type == self.PROCEDURE_APPROACH:
-          if ft == "M":
-            # this is the last point
-            missed = True
-        
-        if pt == "IF":
-          # Initial Fix - simply add the fix to our route
+        if pt == "IF" or pt == "TF":
+          # IF - Initial Fix - simply add the fix to our route
+          # TF - Track to Fix - Current position to Fix via great circle
+          # get the fix
           fix = self.get_fix(pr.fix_identifier, pr.fix_section)
+          
+          # update what we can with our new information
           if pr.altitude1 != None:
-            fix[4] = pr.altitude1
+            fix.altitude = pr.altitude1
+          
+          # add the fix to our set
           routes[key].append(fix)
           
-        elif pt == "TF":
-          # Track to Fix: Point A to Point B via great circle track - simply add the fix to our route
-          fix = self.get_fix(pr.fix_identifier, pr.fix_section)
-          if pr.altitude1 != None:
-            fix[4] = pr.altitude1
-          routes[key].append(fix)
+          # add the heading if we can
+          self.set_current_heading(routes[key])
           
         elif pt == "CF":
-          # Course to Fix: Course to a Fix
-          # first get the fix
+          # Course to Fix: Course to a Fix       
+          # get the fix
           fix = self.get_fix(pr.fix_identifier, pr.fix_section)
+          
+          # update what we can with our new information
           if pr.altitude1 != None:
-            fix[4] = pr.altitude1
-          declination = fix[1]
+            fix.altitude = pr.altitude1
+          fix.heading = pr.magnetic_course
           
-          # if we have an intercept angle, use that to find where to intercept
-          if intercept_heading != None and len(routes[key]) > 0:
-            # use the previous point as the starting point
-            point = routes[key][-1]
-            
-            # find the intercept point
-            intercept_ll = maptools.find_intersection(point[0], intercept_heading, fix[0], pr.magnetic_course, declination)
-
-          else:
-            # find the intercept point using the distance and bearing from the station
-            # if we have a recommended navaid, use that declination
-            if pr.recommended_nav != "":
-              nav = self.get_fix(pr.recommended_nav, pr.nav_section)
-              declination = nav[1]
-              
-            intercept_ll = maptools.forward(origin=fix[0],
-                                            magnetic_course=(pr.magnetic_course+180.0)%360.0, 
-                                            distance_nm=pr.distance,
-                                            declination=declination)
-          # build our new point out
-          intercept = [intercept_ll, fix[1], None, "CF Intercept Point", pr.altitude1]
-          
-          # only add this point if there isn't already a point that is close...maybe we already added something
-          if len(routes[key]) > 0:
-            prev = routes[key][-1]
-            dist = maptools.get_dist_ll(prev[0], intercept_ll)
-            if dist > 500.0: # what if this is wrong?...might you ever have two fixes less than 1500' apart?...not likely, 4 seconds apart
-              routes[key].append(intercept)
-          else:
+          # find the intercept location
+          intercept_ll = maptools.forward(fix.latlon, (pr.magnetic_course+180.0)%360.0, pr.distance, fix.declination)
+          intercept = cf.ProcedureFix(latlon=intercept_ll,
+                                      declination=fix.declination,
+                                      ident=None,
+                                      description="CF Intercept Point",
+                                      altitude=pr.altitude1,
+                                      heading=None)
+                    
+          # first point?
+          if len(routes[key]) == 0:
+            # add the intercept location
             routes[key].append(intercept)
-          
+          else:
+            # if our intercept point is close to the previous point, don't add it
+            # the issue is how far is too far?  500 m is like 4 seconds of flight time, so it is unlikely two fixes would be that close
+            if maptools.get_dist_ll(routes[key][-1].latlon, intercept.latlon) > 500.0:
+              routes[key].append(intercept)
+
           # now add the fix
-          routes[key].append(fix)
+          routes[key].append(fix)          
           
         elif pt == "DF":
+          # Direct to a fix
           # get our fix info
+          # get the fix
           fix = self.get_fix(pr.fix_identifier, pr.fix_section)
+          
+          # update what we can with our new information
           if pr.altitude1 != None:
-            fix[4] = pr.altitude1
-            
-          if len(routes[key]) > 2:
-            # Direct to Fix: standard rate turn to great circle direct
-            pt0 = routes[key][-2] # if this doesn't exist we have no way to know the current heading
-            pt1 = routes[key][-1]
-            
-            if pr.turn_direction == "R":
-              clockwise = True
+            fix.altitude = pr.altitude1
+          
+          if len(routes[key]) == 0:
+            # DF can only show up as a beginning point for a SID runway transition or a SID
+            if pr.transition_identifier.rstrip() == "":
+              # SID, use the airport direct to the fix
+              routes[key].append(self.get_fix(pr.airport, "PA"))
+              routes[key].append(fix)
+              # all done here
+              continue
             else:
-              clockwise = False
-  
-            shape = maptools.build_tangent_to_fix(pt0[0], pt1[0], fix[0], self.APP_5_SPEED_KTS, clockwise)
+              # Runway transition, start at the departure end of the runway
+              routes[key].append(self.get_departure_end(pr.transition_identifier))
+          
+          # figure out our direction of turn
+          add_turn = True
+          # we need to figure it out.
+          # determine the smallest turn and whether it is CW or CCW
+          prev = routes[key][-1]
+          
+          # if the previous point doesn't have a heading, it may have been an IF...just add our new point and be done
+          if prev.heading == None:
+            routes[key].append(fix)
+            self.set_current_heading(routes[key])
+            continue
+          
+          # find our heading change
+          direct = maptools.get_mag_heading(prev.latlon, fix.latlon, fix.declination)
+          dhdg = direct - prev.heading
+          
+          if abs(dhdg) < 10.0:
+            add_turn = False 
+          else:
+            add_turn = True
+          
+          if pr.turn_direction == "R":
+            clockwise = True
+          elif pr.turn_direction == "L":
+            clockwise = False
+          else:
+            if abs(dhdg) < 180.0:
+              if dhdg > 0.0:
+                clockwise = True
+              else:
+                clockwise = False 
+            else:
+              if dhdg > 0.0:
+                clockwise = False
+              else:
+                clockwise = True
+          
+          # now build the turn from our current position to where we are pointing at the fix
+          # if we are barely turning, just go straight to the fix
+          if add_turn:
+            shape = maptools.build_tangent_to_fix(routes[key][-1].latlon, routes[key][-1].heading, fix.latlon, self.APP_5_SPEED_KTS, clockwise)
             
-            # append the points
+            # add each of the points in the shape
             for pt in shape:
-              routes[key].append([pt, fix[1], None, "DF turn", pr.altitude1])
-              
-          # now append the fix
+              routes[key].append(cf.ProcedureFix(pt, fix.declination, None, "DF Turn", pr.altitude1, None))
+              self.set_current_heading(routes[key])
+          
+          # now add the fix and heading
           routes[key].append(fix)
+          self.set_current_heading(routes[key])
           
         elif pt == "FA":
           # Fix to an Altitude: Fix A to an altitude via a course
@@ -417,39 +455,48 @@ class Procedure:
             prev = routes[key][-1]
             
             # figure how far we go in the climb
-            if pr.altitude1 < prev[4]:
+            if pr.altitude1 < prev.altitude:
               # we are already above our altitude, skip this point
               continue
             
             # compute how far it will take to climb
-            dz = pr.altitude1 - prev[4]
+            dz = pr.altitude1 - prev.altitude
             dist = dz / self.APP_5_RATE_OF_CLIMB_FPNM
             
             # build our new point
-            new_point = maptools.forward(origin=prev[0], magnetic_course=pr.magnetic_course, distance_nm=dist, declination=prev[1])
-            routes[key].append([new_point, prev[1], "{}".format(pr.altitude1), "Course to Altitude Point, Position Estimated", pr.altitude1])
+            new_point = maptools.forward(origin=prev.latlon, magnetic_course=pr.magnetic_course, distance_nm=dist, declination=prev.declination)
+            routes[key].append(cf.ProcedureFix(new_point, 
+                                               prev.declination, 
+                                               "{}".format(pr.altitude1), 
+                                               "Course to Altitude Point, Position Estimated", 
+                                               pr.altitude1, 
+                                               pr.magnetic_course))
           else:
             # presume we are coming off a runway
-            rw = self.get_departure_end(pr.transition_identifier) # (lat, lon, el_ft, new_ident, declination)
-            
-            # add this point to the list:
-            routes[key].append([(rw[0], rw[1]), rw[4], rw[3], "{} Departure end".format(pr.transition_identifier)])
+            routes[key].append(self.get_departure_end(pr.transition_identifier))
+            rw = routes[key][-1]
             
             # now figure how far we have to go in the climb
-            dz = pr.altitude1 - rw[2]
+            dz = pr.altitude1 - rw.altitude
             dist = dz / self.APP_5_RATE_OF_CLIMB_FPNM
             
             # # build our new point
-            new_point = maptools.forward(origin=(rw[0], rw[1]), magnetic_course=pr.magnetic_course, distance_nm=dist, declination=rw[4])
-            routes[key].append([new_point, rw[4], "{}".format(pr.altitude1), "Heading to Altitude Point, Position Estimated", pr.altitude1])
-          
+            new_point = maptools.forward(origin=rw.latlon, magnetic_course=pr.magnetic_course, distance_nm=dist, declination=rw.declination)
+            routes[key].append(new_point,
+                               rw.declination,
+                               "{}".format(pr.altitude1),
+                               "Heading to Altitude Point, Position Estimated", 
+                               pr.altitude1,
+                               pr.magnetic_course)
+        
         elif pt == "FC":
           # Fix to a Course: Track a course from a fix for a distance
           # add the fix
           fix = self.get_fix(pr.fix_identifier, pr.fix_section)
           if pr.altitude1 != None:
-            fix[4] = pr.altitude1
+            fix.altitude = pr.altitude1
           routes[key].append(fix)
+          self.set_current_heading(routes[key])
           
         elif pt == "FD":
           # Fix to a DME distance: track a course from a fix to a distance from a DME
@@ -460,9 +507,9 @@ class Procedure:
           # add a point 1 nm out
           point = self.get_fix(pr.fix_identifier, pr.fix_section)
           if pr.altitude1 != None:
-            point[4] = pr.altitude1
-          man_fix = maptools.forward(origin=point[0], magnetic_course=pr.magnetic_course, distance_nm=1.0, declination=point[1])
-          routes[key].append([man_fix, point[1], None, "FM Manual Termination", point[4]])
+            point.altitude = pr.altitude1
+          man_fix = maptools.forward(origin=point.latlon, magnetic_course=pr.magnetic_course, distance_nm=1.0, declination=point.declination)
+          routes[key].append(cf.ProcedureFix(man_fix, point.declination, None, "FM Manual Termination", point.altitude, pr.magnetic_course))
           
         elif pt == "CA":
           # Course to an altitude
@@ -471,31 +518,41 @@ class Procedure:
             prev = routes[key][-1]
             
             # figure how far we go in the climb
-            if pr.altitude1 < prev[4]:
+            if pr.altitude1 < prev.altitude:
               # we are already above our altitude, skip this point
               continue
             
             # compute how far it will take to climb
-            dz = pr.altitude1 - self.elevation_ft
+            dz = pr.altitude1 - prev.altitude
             dist = dz / self.APP_5_RATE_OF_CLIMB_FPNM
             
             # build our new point
-            new_point = maptools.forward(origin=prev[0], magnetic_course=pr.magnetic_course, distance_nm=dist, declination=prev[1])
-            routes[key].append([new_point, prev[1], "{}".format(pr.altitude1), "Course to Altitude Point, Position Estimated", pr.altitude1])
+            new_point = maptools.forward(origin=prev.latlon, magnetic_course=pr.magnetic_course, distance_nm=dist, declination=prev.declination)
+            routes[key].append(cf.ProcedureFix(new_point, 
+                                               prev.declination, 
+                                               "{}".format(pr.altitude1), 
+                                               "Course to Altitude Point, Position Estimated", 
+                                               pr.altitude1,
+                                               pr.magnetic_course))
           else:
             # presume we are coming off a runway
-            rw = self.get_departure_end(pr.transition_identifier) # (lat, lon, el_ft, new_ident, declination)
+            rw = self.get_departure_end(pr.transition_identifier)
             
             # add this point to the list:
-            routes[key].append([(rw[0], rw[1]), rw[4], rw[3], "{} Departure end".format(pr.transition_identifier)])
+            routes[key].append(rw)
             
             # now figure how far we have to go in the climb
-            dz = pr.altitude1 - rw[2]
+            dz = pr.altitude1 - rw.altitude
             dist = dz / self.APP_5_RATE_OF_CLIMB_FPNM
             
             # # build our new point
-            new_point = maptools.forward(origin=(rw[0], rw[1]), magnetic_course=pr.magnetic_course, distance_nm=dist, declination=rw[4])
-            routes[key].append([new_point, rw[4], "{}".format(pr.altitude1), "Heading to Altitude Point, Position Estimated", pr.altitude1])
+            new_point = maptools.forward(origin=rw.latlon, magnetic_course=pr.magnetic_course, distance_nm=dist, declination=rw.declination)
+            routes[key].append(cf.ProcedureFix(new_point, 
+                                               rw.declination, 
+                                               "{}".format(pr.altitude1), 
+                                               "Heading to Altitude Point, Position Estimated", 
+                                               pr.altitude1,
+                                               pr.magnetic_course))
             
         elif pt == "CD":
           # Course to a DME Distance: track a course to a distance from a DME
@@ -506,7 +563,7 @@ class Procedure:
           nav = self.get_fix(pr.recommended_nav, pr.nav_section)
           
           # get the heading from the prev to the nav
-          heading_to_nav = maptools.get_mag_heading(prev[0], nav[0], nav[1])
+          heading_to_nav = maptools.get_mag_heading(prev.latlon, nav.latlon, nav.declination)
           
           dhdg = abs(heading_to_nav - pr.magnetic_course)
           
@@ -520,13 +577,17 @@ class Procedure:
           point = maptools.forward(nav[0], outbound_course, pr.distance, nav[1])
           
           # add the point
-          routes[key].append([point, nav[1], "{}".format(pr.altitude1), "Course to Distance", pr.altitude1])
+          routes[key].append(cf.ProcedureFix(point, 
+                                             nav.declination, 
+                                             "{}".format(pr.altitude1), 
+                                             "Course to Distance", 
+                                             pr.altitude1,
+                                             pr.magnetic_course))
           
         elif pt == "CI":
           # Course to an intercept: track a course to intercept the next leg
-          if len(routes[key]) >= 2:
+          if len(routes[key]) >= 1:
             # get the last point as the starting point
-            p0 = routes[key][-2]
             p1 = routes[key][-1]
             
             if pr.turn_direction == "R":
@@ -544,18 +605,20 @@ class Procedure:
             else:
               intercept_course = pr.theta
             
-            turn_shape = maptools.turn_to_heading(p0[0], p1[0], pr.magnetic_course, nav[1], clockwise, self.APP_5_SPEED_KTS)
+            turn_shape = maptools.turn_to_heading(p1.latlon, p1.heading, pr.magnetic_course, nav.declination, clockwise, self.APP_5_SPEED_KTS)
             
             # save the last point
             p2 = turn_shape[-1]
                         
             # add our turn points
             for point in turn_shape:
-              routes[key].append([point, nav[1], None, "Turn to Heading", pr.altitude1])
+              routes[key].append(cf.ProcedureFix(point, nav.declination, None, "Turn to Heading", pr.altitude1, None))
+              self.set_current_heading(routes[key])
             
             # now find the intercept point
-            intercept = maptools.find_intersection(p2, pr.magnetic_course, nav[0], intercept_course, nav[1])
-            routes[key].append([intercept, nav[1], None, "Intercept", pr.altitude1])
+            intercept = maptools.find_intersection(p2, pr.magnetic_course, nav.latlon, intercept_course, nav.declination)
+            routes[key].append(cf.ProcedureFix(intercept, nav.declination, None, "Intercept", pr.altitude1, None))
+            self.set_current_heading(routes[key])
         
         elif pt == "CR":
           # Course to a Radial: track a course to intercept a VOR Radial
@@ -569,19 +632,20 @@ class Procedure:
           # now get our end point and center
           arc_end = self.get_fix(pr.fix_identifier, pr.fix_section)
           if pr.altitude1 != None:
-            arc_end[4] = pr.altitude1
+            arc_end.altitude = pr.altitude1
           arc_center = self.get_fix(pr.center_fix, pr.center_section)
           if pr.altitude1 != None:
-            arc_center[4] = pr.altitude1
+            arc_center.altitude = pr.altitude1
           radius_nm = pr.arc_radius
           if pr.turn_direction == "R":
             clockwise = True
           else:
             clockwise = False
-          shape = maptools.arc_path(arc_begin[0], arc_end[0], arc_center[0], radius_nm, clockwise, "RF Fix")
+          shape = maptools.arc_path(arc_begin.latlon, arc_end.latlon, arc_center.latlon, radius_nm, clockwise, "RF Fix")
           
           for pt in shape:
-            routes[key].append([pt, arc_end[1], None, "RF arc", arc_end[4]])
+            routes[key].append(cf.ProcedureFix(pt, arc_end.declination, None, "RF arc", pr.altitude1, None))
+            self.set_current_heading(routes[key])
             
           # add our end point
           routes[key].append(arc_end)
@@ -595,10 +659,11 @@ class Procedure:
             clockwise = True
           else:
             clockwise = False
-          shape = maptools.arc_path(arc_begin[0], arc_end[0], arc_center[0], pr.rho, clockwise, "Arc to Fix")
+          shape = maptools.arc_path(arc_begin.latlon, arc_end.latlon, arc_center.latlon, pr.rho, clockwise, "Arc to Fix")
           
           for pt in shape:
-            routes[key].append([pt, arc_center[1], None, "DME Arc", pr.altitude1])
+            routes[key].append(cf.ProcedureFix(pt, arc_center.declination, None, "DME Arc", pr.altitude1, None))
+            self.set_current_heading(routes[key])
           
           # add our fix
           routes[key].append(arc_end)
@@ -608,28 +673,38 @@ class Procedure:
           # we have no starting point...this is our very first point
           if len(routes[key]) == 0:
             # Probably a runway
-            rw = self.get_departure_end(pr.transition_identifier) # (lat, lon, el_ft, new_ident, declination)
+            rw = self.get_departure_end(pr.transition_identifier)
             
             # add this point to the list:
-            routes[key].append([(rw[0], rw[1]), rw[4], rw[3], "{} Departure end".format(pr.transition_identifier), pr.altitude1])
+            routes[key].append(rw)
             
             # now figure how far we have to go in the climb
-            dz = pr.altitude1 - rw[2]
+            dz = pr.altitude1 - rw.altitude
             dist = dz / self.APP_5_RATE_OF_CLIMB_FPNM
             
             # # build our new point
-            new_point = maptools.forward(origin=(rw[0], rw[1]), magnetic_course=pr.magnetic_course, distance_nm=dist, declination=rw[4])
-            routes[key].append([new_point, rw[4], "{}".format(pr.altitude1), "Heading to Altitude Point, Position Estimated", pr.altitude1])
+            new_point = maptools.forward(origin=rw.latlon, magnetic_course=pr.magnetic_course, distance_nm=dist, declination=rw.declination)
+            routes[key].append(cf.ProcedureFix(new_point, 
+                                               rw.declination, 
+                                               "{}".format(pr.altitude1), 
+                                               "Heading to Altitude Point, Position Estimated", 
+                                               pr.altitude1, 
+                                               pr.magnetic_course))
           else:
             prev = routes[key][-1]
             
             # figure how far we have to go in the climb
-            dz = pr.altitude1 - prev[4]
+            dz = pr.altitude1 - prev.altitude
             dist = dz / self.APP_5_RATE_OF_CLIMB_FPNM
             
             # # build our new point
-            new_point = maptools.forward(origin=prev[0], magnetic_course=pr.magnetic_course, distance_nm=dist, declination=prev[1])
-            routes[key].append([new_point, prev[1], "{}".format(pr.altitude1), "Heading to Altitude Point, Position Estimated", pr.altitude1])
+            new_point = maptools.forward(origin=prev.latlon, magnetic_course=pr.magnetic_course, distance_nm=dist, declination=prev.declination)
+            routes[key].append(cf.ProcedureFix(new_point, 
+                                               prev.declination, 
+                                               "{}".format(pr.altitude1), 
+                                               "Heading to Altitude Point, Position Estimated", 
+                                               pr.altitude1, 
+                                               pr.magnetic_course))
             
         elif pt == "VD":
           print(pr.procedure_identifier, pr.transition_identifier)
@@ -641,7 +716,7 @@ class Procedure:
           nav = self.get_fix(pr.recommended_nav, pr.nav_section)
           
           # get the heading from the prev to the nav
-          heading_to_nav = maptools.get_mag_heading(prev[0], nav[0], nav[1])
+          heading_to_nav = maptools.get_mag_heading(prev.latlon, nav.latlon, nav.declination)
           
           dhdg = abs(heading_to_nav - pr.magnetic_course)
           
@@ -652,24 +727,58 @@ class Procedure:
             # we are heading towards the station
             outbound_course = (pr.magnetic_course+180.0)%360.0
           
-          point = maptools.forward(nav[0], outbound_course, pr.distance, nav[1])
+          point = maptools.forward(nav.latlon, outbound_course, pr.distance, nav.declination)
           
           # add the point
-          routes[key].append([point, nav[1], "{}".format(pr.altitude1), "Heading to Distance", pr.altitude1])
+          routes[key].append(cf.ProcedureFix(point, 
+                                             nav.declination, 
+                                             "{}".format(pr.altitude1), 
+                                             "Heading to Distance", 
+                                             pr.altitude1, 
+                                             pr.magnetic_course))
           
         elif pt == "VI":
           # Heading to an Intercept
-          # if there are no points, maybe we are coming off a runway
+          # if we have a previous point, simply update the previous point with the heading
           if len(routes[key]) == 0:
-            # we know this is a SID and it is a runway transition, so lets figure our point from the runway
-            # we have to be careful, the transition name may not be a specific runway...it may also include a B for both runways
-            rw = self.get_departure_end(pr.transition_identifier) # (lat, lon, el_ft, new_ident, declination)
-            
-            # add this point to the list:
-            routes[key].append([(rw[0], rw[1]), rw[4], rw[3], "{} Departure end".format(pr.transition_identifier), rw[2]])
+            # find the departure runway
+            routes[key].append(self.get_departure_end(pr.transition_identifier))
           
-          # save the heading we can use it to figure the next point on the next line
-          intercept_heading = pr.magnetic_course
+          # get our last point
+          prev = routes[key][-1]
+          
+          dhdg = pr.magnetic_course - prev.heading
+          if abs(dhdg) < 10.0:
+              prev.heading = pr.magnetic_course
+              continue
+          
+          if pr.turn_direction == "R":
+            clockwise = True
+          elif pr.turn_direction == "L":
+            clockwise = False
+          else:
+            # turn direction is not defined
+            if abs(dhdg) < 180.0:
+              if dhdg > 0.0:
+                clockwise = True
+              else:
+                clockwise = False 
+            else:
+              if dhdg > 0.0:
+                clockwise = False
+              else:
+                clockwise = True
+
+          # now we need to add a turn to our heading
+          turn_shape = maptools.turn_to_heading(prev.latlon, prev.heading, pr.magnetic_course, prev.declination, clockwise, self.APP_5_SPEED_KTS)
+
+          # add our turn points
+          for point in turn_shape:
+            routes[key].append(cf.ProcedureFix(point, prev.declination, None, "Turn to Heading", pr.altitude1, None))
+            self.set_current_heading(routes[key])
+          
+          # make sure our last point is the intercept heading
+          routes[key][-1].heading = pr.magnetic_course
         
         elif pt == "VM":
           # Heading to Manual Termination
@@ -678,22 +787,29 @@ class Procedure:
             rw = self.get_departure_end(pr.transition_identifier) # (lat, lon, el_ft, new_ident, declination)
             
             # add this point to the list:
-            routes[key].append([(rw[0], rw[1]), rw[4], rw[3], "{} Departure end".format(pr.transition_identifier), rw[2]])
+            routes[key].append(rw)
             
           # get the starting point
           point = routes[key][-1]
           
-          man_fix = maptools.forward(origin=point[0], magnetic_course=pr.magnetic_course, distance_nm=1.0, declination=point[1])
-          routes[key].append([man_fix, point[1], None, "VM Manual Termination", point[4]])
+          man_fix = maptools.forward(origin=point.latlon, magnetic_course=pr.magnetic_course, distance_nm=1.0, declination=point.declination)
+          routes[key].append(cf.ProcedureFix(man_fix, 
+                                             point.declination, 
+                                             None, 
+                                             "VM Manual Termination", 
+                                             point.altitude, 
+                                             None))
+          self.set_current_heading(routes[key])
           
         elif pt == "VR":
           # Heading to intercept a VOR radial
           point = routes[key][-1]
           fix = self.get_fix(pr.recommended_nav, pr.nav_section)
           
-          intersection = maptools.find_intersection(point[0], pr.magnetic_course, fix[0], pr.theta, fix[1])
+          intersection = maptools.find_intersection(point.latlon, pr.magnetic_course, fix.latlon, pr.theta, fix.declination)
           
-          routes[key].append([intersection, fix[1], None, "Heading to Radial Intercept", None])
+          routes[key].append(cf.ProcedureFix(intersection, fix.declination, None, "Heading to Radial Intercept", pr.altitude1,None))
+          self.set_current_heading(routes[key])
           
         elif pt == "PI":
           # Procedure Turn
@@ -705,18 +821,16 @@ class Procedure:
           else:
             outbound_course = (pr.magnetic_course-45.0+360.0)%360.0
           
-          shape = maptools.build_procedure_turn(fix[0], outbound_course, pr.magnetic_course, pr.turn_direction, fix[1], pr.distance)
+          shape = maptools.build_procedure_turn(fix.latlon, outbound_course, pr.magnetic_course, pr.turn_direction, fix.declination, pr.distance)
           for point in shape:
-            routes[key].append([point, fix[1], None, "PI Procedure Turn", pr.altitude1])
-          
-          # save the heading we can use it to figure the next point on the next line
-          intercept_heading = (outbound_course+180.0)%360.0
+            routes[key].append(cf.ProcedureFix(point, fix.declination, None, "PI Procedure Turn", pr.altitude1, None))
+            self.set_current_heading(routes[key])
           
         elif pt == "HM" or pt == "HF" or pt == "HA":
           # Hold to Manual Termination, Hold to Fix, Hold to Altitude
           hold_fix = self.get_fix(pr.fix_identifier, pr.fix_section)
           if pr.altitude1 != None:
-            hold_fix[4] = pr.altitude1
+            hold_fix.altitude = pr.altitude1
           inbound_course = pr.magnetic_course
           turn_direction = pr.turn_direction
           if pr.time == None:
@@ -724,18 +838,19 @@ class Procedure:
           else:
             leg_distance_nm = pr.time*self.APP_5_SPEED_KTS/60.0
           
-          shape = maptools.build_hold(hold_fix[0], inbound_course, turn_direction, leg_distance_nm, hold_fix[1], self.APP_5_SPEED_KTS)
+          shape = maptools.build_hold(hold_fix.latlon, inbound_course, turn_direction, leg_distance_nm, hold_fix.declination, self.APP_5_SPEED_KTS)
           for pt in shape:
-            routes[key].append([pt, hold_fix[1], None, "Hold Track", pr.altitude1])
-      
-      if intercept_heading != None:
-        intercept_heading_count += 1
-        if intercept_heading_count > 1:
-          intercept_heading = None
-          intercept_heading_count = 0
+            routes[key].append(cf.ProcedureFix(pt, hold_fix.declination, None, "Hold Track", pr.altitude1, None))
+            self.set_current_heading(routes[key])
+
                         
     return routes  
 
+  def set_current_heading(self, routes):
+    if len(routes) >= 2:
+      routes[-1].heading = maptools.get_mag_heading(routes[-2].latlon, routes[-1].latlon, routes[-1].declination)
+    return
+    
   def get_departure_end(self, ident):
     # is this even a runway
     if ident[:2] != "RW":
@@ -759,21 +874,23 @@ class Procedure:
     # if we have a legal name get the runway data
     if new_ident[4] != "B":
       rw = self.pg.get_point(new_ident)
-      latitude = rw[0][0]
-      longitude = rw[0][1]
-      elevation = rw[4]
-      declination = rw[1]
+      latitude = rw.latlon[0]
+      longitude = rw.latlon[1]
+      elevation = rw.altitude
+      declination = rw.declination
+      heading = (rw.heading+180.0)%360.0
       
     else:
       # this applies to both runways, find the average position
       rwl = self.pg.get_point(new_ident[:4]+"L")
       rwr = self.pg.get_point(new_ident[:4]+"R")
-      latitude = (rwl[0][0]+rwr[0][0])/2.0
-      longitude = (rwl[0][1]+rwr[0][1])/2.0
-      elevation = (rwl[4]+rwr[4])/2.0
-      declination = (rwl[1]+rwr[1])/2.0
+      latitude = (rwl.latlon[0]+rwr.latlon[0])/2.0
+      longitude = (rwl.latlon[1]+rwr.latlon[1])/2.0
+      elevation = (rwl.altitude+rwr.altitude)/2.0
+      declination = (rwl.declination+rwr.declination)/2.0
+      heading = (rwl.heading+180.0)%360.0 # headings may not average well...the headings should be nearly identical anyway.
     
-    return latitude, longitude, elevation, new_ident, declination
+    return cf.ProcedureFix((latitude, longitude), declination, new_ident, "{} Departure End".format(ident), elevation, heading)
 
       
 class ProcedureRecord:
