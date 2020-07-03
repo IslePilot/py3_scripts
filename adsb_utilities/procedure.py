@@ -276,16 +276,16 @@ class Procedure:
     # build each section of the procedure on its own
     procedure = {}
     for key, route in self.process_route(self.runway_transitions, include_missed).items():
-      print("     "+key)
+      print("  "+key)
       procedure[key] = route
     for key, route in self.process_route(self.enroute_transistions, include_missed).items():
-      print("     "+key)
+      print("  "+key)
       procedure[key] = route
     for key, route in self.process_route(self.common_route, include_missed).items():
-      print("     "+key)
+      print("  "+key)
       procedure[key] = route
     for key, route in self.process_route(self.approach_transition, include_missed).items():
-      print("     "+key)
+      print("  "+key)
       procedure[key] = route
       
     return procedure
@@ -302,6 +302,7 @@ class Procedure:
     
     for key, prs in procedure_records.items():
       routes[key] = []
+      print("     ", key)
       end_of_procedure = False  # only used when missed approach is NOT requested
       for pr in prs:
         # should we stop processing?
@@ -357,7 +358,7 @@ class Procedure:
           intercept = cf.ProcedureFix(latlon=intercept_ll,
                                       declination=fix.declination,
                                       ident=None,
-                                      description="CF Intercept Point",
+                                      description="Given CF Intercept Point",
                                       altitude=pr.altitude1,
                                       heading=None)
                     
@@ -366,10 +367,21 @@ class Procedure:
             # add the intercept location
             routes[key].append(intercept)
           else:
-            # if our intercept point is close to the previous point, don't add it
-            # the issue is how far is too far?  500 m is like 4 seconds of flight time, so it is unlikely two fixes would be that close
-            if maptools.get_dist_ll(routes[key][-1].latlon, intercept.latlon) > 500.0:
-              routes[key].append(intercept)
+            # if the previous point offers a heading, build the intercept point from that
+            prev = routes[key][-1]
+            if prev.heading != None:
+              # if our current heading is different than the intercept heading, define an intercept point
+              dhdg = pr.magnetic_course - prev.heading
+              if abs(dhdg) > 10.0 and abs(dhdg) < 170.0:
+                # build the intercept point
+                int_ll = maptools.find_intersection(prev.latlon, prev.heading, fix.latlon, pr.magnetic_course, fix.declination)
+                routes[key].append(cf.ProcedureFix(int_ll, fix.declination, None, "Computed CF Intercept", pr.altitude1, prev.heading))
+            else:
+              # just use the defined intercept if it isn't already near our last point
+              # if our intercept point is close to the previous point, don't add it
+              # the issue is how far is too far?  500 m is like 4 seconds of flight time, so it is unlikely two fixes would be that close
+              if maptools.get_dist_ll(routes[key][-1].latlon, intercept.latlon) > 500.0:
+                routes[key].append(intercept)
 
           # now add the fix
           routes[key].append(fix)          
@@ -482,21 +494,28 @@ class Procedure:
             
             # # build our new point
             new_point = maptools.forward(origin=rw.latlon, magnetic_course=pr.magnetic_course, distance_nm=dist, declination=rw.declination)
-            routes[key].append(new_point,
-                               rw.declination,
-                               "{}".format(pr.altitude1),
-                               "Heading to Altitude Point, Position Estimated", 
-                               pr.altitude1,
-                               pr.magnetic_course)
+            routes[key].append(cf.ProcedureFix(new_point,
+                                               rw.declination,
+                                               "{}".format(pr.altitude1),
+                                               "Heading to Altitude Point, Position Estimated", 
+                                               pr.altitude1,
+                                               pr.magnetic_course))
         
         elif pt == "FC":
-          # Fix to a Course: Track a course from a fix for a distance
+          # Fix for a Distance
           # add the fix
           fix = self.get_fix(pr.fix_identifier, pr.fix_section)
           if pr.altitude1 != None:
             fix.altitude = pr.altitude1
-          routes[key].append(fix)
-          self.set_current_heading(routes[key])
+          
+          # build our new point
+          new_point = maptools.forward(origin=fix.latlon, magnetic_course=pr.magnetic_course, distance_nm=pr.distance, declination=fix.declination)
+          routes[key].append(cf.ProcedureFix(new_point,
+                                             fix.declination,
+                                             "{}".format(pr.altitude1),
+                                             "FC Point", 
+                                             pr.altitude1,
+                                             pr.magnetic_course))
           
         elif pt == "FD":
           # Fix to a DME distance: track a course from a fix to a distance from a DME
@@ -707,7 +726,14 @@ class Procedure:
                                                pr.magnetic_course))
             
         elif pt == "VD":
-          print(pr.procedure_identifier, pr.transition_identifier)
+          # we have no starting point...this is our very first point
+          if len(routes[key]) == 0:
+            # Probably a runway
+            rw = self.get_departure_end(pr.transition_identifier)
+            
+            # add this point to the list:
+            routes[key].append(rw)
+          
           # Heading to a distance from a DME
           # get the previous point
           prev = routes[key][-1]

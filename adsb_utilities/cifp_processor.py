@@ -27,12 +27,12 @@ Revision History:
 
 import cifp_functions as cf
 import cifp_point as cp
-import airway as airway
-
-import airspace as airspace
-import airport as airport
-import procedure as procedure
-import nation as nation
+import airway
+import maptools
+import airspace
+import airport
+import procedure
+import nation
 import kml_output as kmlout
 
 import simplekml
@@ -52,7 +52,7 @@ class CIFPReader:
   OUTCOLOR_WHITE = 7
   OUTCOLOR_GRAY = 8
   
-  def __init__(self, path, cifp_version,  lat_min, lat_max, lon_min, lon_max):
+  def __init__(self, path, cifp_version,  lat_min=-90.0, lat_max=90.0, lon_min=-180.0, lon_max=180.0):
     # save the filename
     self.outpath = path+'\\'+cifp_version+'\\Processed\\'
     self.filename = path+'\\'+cifp_version+'\\FAACIFP18'
@@ -67,6 +67,7 @@ class CIFPReader:
     self.usa = nation.NationalAirspace()
     
     # process the data file
+    print("Reading CIFP file...")
     self.process_file()
     
     # debug testing
@@ -74,7 +75,130 @@ class CIFPReader:
     
     return
   
-  def build_procedures(self, airport, include_missed):
+  def build_nationwide_items(self):
+    """ build the nationwide items for the USA"""
+    # build the KML base
+    self.kml = kmlout.KMLOutput("VHF Navaids", self.outpath+"USA_Navaids.kml")
+    
+    print("Building VHF Navaids")
+    vors = self.usa.get_vors()
+    for vor in vors:
+      self.kml.add_point(self.kml.rootfolder, vor[0], vor[1], vor[3])
+    
+    self.kml.savefile()
+    
+    # build the KML structure
+    self.kml = kmlout.KMLOutput("Airspace", self.outpath+"USA_Airspace.kml")
+
+    # add the controlled airspace
+    print("Building Controlled Airspace")
+    controlled_airspace = self.kml.create_folder("Controlled Airspace")
+    outfile = open(self.outpath+"USA_ControlledAirspace.out", "w")
+    outfile.write("{{USA Controlled Airspace}}\n")
+    outfile.write("$TYPE={}\n".format(self.OUTCOLOR_MAGENTA))
+    
+    for airport in self.usa.airports.keys():
+      if len(self.usa.airports[airport].controlled_airspace) > 0:
+        print("   {}".format(airport))
+        airport_folder = self.kml.create_folder("{}".format(airport), controlled_airspace)
+        for name, ashape in self.usa.airports[airport].controlled_airspace.items():
+          # shape is an AirspaceShape
+          # build the shape in lat/lon points
+          shape = ashape.build_airspace_shape()
+          
+          # add the shape to the files
+          self.kml.add_line(airport_folder, name, shape, simplekml.Color.blue)
+          
+          # add the shape to the out file
+          for pt in shape:
+            outfile.write("{:.6f}+{:.6f}\n".format(*pt))
+          outfile.write("-1\n")
+    outfile.close()
+    
+    # add the restricted airspace
+    print("Building Restricted Airspace")
+    restricted_airspace = self.kml.create_folder("Restricted Airspace")
+    outfile = open(self.outpath+"USA_RestrictedAirspace.out", "w")
+    outfile.write("{{USA Restricted Airspace}}\n")
+    outfile.write("$TYPE={}\n".format(self.OUTCOLOR_ORANGE))
+    
+    ra_folders = {}
+    for key, ashape in self.usa.restrictive_airspace.items():
+      key_parts = key.split(",")
+      name = "{}".format(key_parts[0])
+      sect = "Section {}".format(key_parts[1])
+      print("     {}: {}".format(name, sect))
+      
+      if name not in ra_folders:
+        # create a folder and save it
+        ra_folders[name] = self.kml.create_folder("{}".format(name), restricted_airspace)
+      
+      # the shape is an AirspaceShape, build the shape in lat/lon points
+      shape = ashape.build_airspace_shape()
+      
+      # add the shape to the kml file
+      self.kml.add_line(ra_folders[name], sect, shape, simplekml.Color.magenta)
+      
+      # add the shape to the out file
+      for pt in shape:
+        outfile.write("{:.6f}+{:.6f}\n".format(*pt))
+      outfile.write("-1\n")
+    outfile.close()
+    
+    # write out the airspace kml
+    self.kml.savefile()
+    
+    # add the runway boundaries
+    self.kml = kmlout.KMLOutput("Runways", self.outpath+"USA_Runways.kml")
+    
+    print("Building Runways")
+    outfile = open(self.outpath+"USA_Runways.out", "w")
+    outfile.write("{{USA Runways}}\n")
+    outfile.write("$TYPE={}\n".format(self.OUTCOLOR_YELLOW))
+    
+    for airport in self.usa.airports.keys():
+      if len(self.usa.airports[airport].runways.points) > 0:
+        print("{}".format(airport))
+        airport_folder = self.kml.create_folder("{}".format(airport))
+        
+        # get a dictionary of the runways at the airport
+        processed = []
+        for rw, point in self.usa.airports[airport].runways.points.items():
+          if rw not in processed:
+            print("  {}".format(rw))
+            # find the opposite runway
+            orw = self.opposite_runway(rw)
+            
+            # only keep working if the opposite runway exists
+            if orw in self.usa.airports[airport].runways.points:
+              # get the opposite runway data
+              opoint = self.usa.airports[airport].runways.points[orw]
+              
+              # add both to the processed list...once we have done a set, we are done
+              processed.append(rw)
+              processed.append(orw)
+              
+              # build a name for the runway
+              name = "Runway {}-{}".format(rw[2:].rstrip(), orw[2:].rstrip())
+              print("  {}".format(name))
+              
+              # build the runway shape
+              shape = maptools.build_runway((point.latitude, point.longitude), (opoint.latitude, opoint.longitude), point.width_ft, point.bearing, point.declination)
+              
+              # add the shape to the kml file
+              self.kml.add_line(airport_folder, name, shape, simplekml.Color.yellow)
+              
+              # add the shape to the out file
+              for pt in shape:
+                outfile.write("{:.6f}+{:.6f}\n".format(*pt))
+              outfile.write("-1\n")
+      
+    outfile.close()
+    self.kml.savefile()
+    
+    return
+  
+  def build_airport(self, airport, include_missed):
     """ build all procedures (SIDS, STARS, and Approaches) related to an airport"""
     self.kml = kmlout.KMLOutput(airport, self.outpath+"{}.kml".format(airport))
     
@@ -134,6 +258,20 @@ class CIFPReader:
       # build the out and GPX files
       self.build_pp_files(routes, "APPR", airport, name, self.OUTCOLOR_BLUE)
     
+    # add the airspace
+    airspace = self.kml.create_folder("AIRSPACE")
+    shapes = []
+    for name, ashape in self.usa.airports[airport].controlled_airspace.items():
+      # shape is an AirspaceShape
+      # build the shape in lat/lon points
+      shape = ashape.build_airspace_shape()
+      shapes.append(shape)
+      # add the shape to the files
+      self.kml.add_line(airspace, name, shape, simplekml.Color.magenta)
+    
+    # build the OUT file
+    self.build_pp_airspace(shapes, airport, self.OUTCOLOR_MAGENTA)
+    
     if added_data:
       self.kml.savefile()
     return
@@ -169,7 +307,24 @@ class CIFPReader:
     
     outfile.close()
     return
+  
+  def build_pp_airspace(self, shapes, airport, color):
+    # build the OUT file
+    outfile = open(self.outpath+"{}_Airspace.out".format(airport), "w")
     
+    # add the header and color
+    outfile.write("{{{}_Airspace}}\n".format(airport))
+    outfile.write("$TYPE={}\n".format(color))
+    
+    # add each shape
+    for shape in shapes:
+      for pt in shape:
+        # output
+        outfile.write("{:.6f}+{:.6f}\n".format(*pt))
+      outfile.write("-1\n")
+    
+    outfile.close()
+        
   def debug(self):
     # debug test
     #                          Airport       Procedure    
@@ -526,255 +681,144 @@ class CIFPReader:
     
     return
   
-  
-
-class WaypointsOut:
-  def __init__(self, path, cifp_version):
-    # save the input
-    self.path = path
-    self.cifp_version = cifp_version
+  def opposite_runway(self, ident):
+    if len(ident.rstrip()) == 1:
+      if ident == "E    ":
+        new_ident = "W    "
+      elif ident == "W    ":
+        new_ident = "E    "
+      elif ident == "N    ":
+        new_ident = "S    "
+      elif ident == "S    ":
+        new_ident = "N    "
+      else:
+        print("Unhandled 1 character Runway ID")
+        new_ident = "X    "
+    elif len(ident.rstrip()) == 2:
+      if ident == "NE   ":
+        new_ident = "SW   "
+      elif ident == "NW   ":
+        new_ident = "SE   "
+      elif ident == "SE   ":
+        new_ident = "NW    "
+      elif ident == "SW   ":
+        new_ident = "NE   "
+    elif len(ident.rstrip()) >= 4:
+      # get the opposite runway number
+      num = int(ident[2:4])
+      opp_num = (num+18)%36
+      if opp_num == 0:
+        opp_num = 36
+        
+      # build our runway name
+      new_ident = "RW{:02d}".format(opp_num)
+      if ident[4] == "L":
+        new_ident += "R"
+      elif ident[4] == "R":
+        new_ident += "L"
+      else:
+        new_ident += ident[4]
     
-    # create the kml documents
-    self.vors = simplekml.Kml()
-    self.vors.document.name = "VHF Navaids"
-    
-    self.ndbs = simplekml.Kml()
-    self.ndbs.document.name = "NDBs"
-    
-    self.enroute_waypoints = simplekml.Kml()
-    self.enroute_waypoints.document.name = "Waypoints"
-    
-    self.terminal_waypoints = simplekml.Kml()
-    self.terminal_waypoints.document.name = "Terminal Waypoints"
-    
-    self.terminal_ndbs = simplekml.Kml()
-    self.terminal_ndbs.document.name = "Terminal NDBs"
-    
-    self.airports = simplekml.Kml()
-    self.airports.document.name = "Airports"
-    
-    self.runways = simplekml.Kml()
-    self.runways.document.name = "Runways"
-    
-    return
-  
-  def save_files(self):
-    # save the kml file
-    self.vors.save(self.path + "\\{}_VORs.kml".format(self.cifp_version))
-    self.ndbs.save(self.path + "\\{}_NDBs.kml".format(self.cifp_version))
-    self.enroute_waypoints.save(self.path + "\\{}_Waypoints.kml".format(self.cifp_version))
-    self.terminal_waypoints.save(self.path + "\\{}_TerminalWaypoints.kml".format(self.cifp_version))
-    self.terminal_ndbs.save(self.path + "\\{}_TerminalNDBs.kml".format(self.cifp_version))
-    self.airports.save(self.path + "\\{}_Airports.kml".format(self.cifp_version))
-    self.runways.save(self.path + "\\{}_Runways.kml".format(self.cifp_version))
-    
-    return
-  
-  
-  def add_point(self, point):
-    """add a cifp_point to the document
-    
-    cifp_point: Point instance
-    """
-    # build our cifp_point with elevation if available
-    if point.elevation_ft != None:
-      # convert to meters
-      elevation = 0.3048 * point.elevation_ft
-      location = (point.longitude, point.latitude, elevation)
-    else:
-      location = (point.longitude, point.latitude)
-    
-    # figure out which kml document this cifp_point belongs to and configure the description
-    description = ''
-    identifier = point.ident
-    if point.style == point.Point.POINT_VOR:
-      kml_doc = self.vors
-      description += "Name:{}\n".format(point.name)
-      description += "Type: VOR\n"
-      description += "Frequency:{:.2f} MHz\n".format(point.frequency)
-      description += "Declination:{:.1f} degrees\n".format(point.declination)
-    elif point.style == point.Point.POINT_VORDME:
-      kml_doc = self.vors
-      description += "Name:{}\n".format(point.name)
-      description += "Type: VOR/DME\n"
-      description += "Frequency:{:.2f} MHz\n".format(point.frequency)
-      description += "Declination:{:.1f} degrees\n".format(point.declination)
-    elif point.style == point.Point.POINT_VORTAC:
-      kml_doc = self.vors
-      description += "Name:{}\n".format(point.name)
-      description += "Type: VORTAC\n"
-      description += "Frequency:{:.2f} MHz\n".format(point.frequency)
-      description += "Declination:{:.1f} degrees\n".format(point.declination)
-    elif point.style == point.Point.POINT_NDB:
-      kml_doc = self.ndbs
-      description += "Name:{}\n".format(point.name)
-      description += "Frequency:{:.0f} kHz\n".format(point.frequency)
-      description += "Declination:{:.1f} degrees\n".format(point.declination)
-    elif point.style == point.Point.POINT_ENROUTE_WAYPOINT:
-      kml_doc = self.enroute_waypoints
-      description += "Name:{}\n".format(point.name)
-      description += "Declination:{:.1f} degrees\n".format(point.declination)
-    elif point.style == point.Point.POINT_TERMINAL_WAYPOINT:
-      kml_doc = self.terminal_waypoints
-      description += "Name:{}\n".format(point.name)
-      description += "Declination:{:.1f} degrees\n".format(point.declination)
-    elif point.style == point.Point.POINT_TERMINAL_NDB:
-      kml_doc = self.terminal_ndbs
-      description += "Name:{}\n".format(point.name)
-      description += "Frequency:{:.0f} kHz\n".format(point.frequency)
-      description += "Declination:{:.1f} degrees\n".format(point.declination)
-    elif point.style == point.Point.POINT_AIRPORT:
-      kml_doc = self.airports
-      description += "Name:{}\n".format(point.name)
-      description += "Elevation:{} feet\n".format(point.elevation_ft)
-      description += "Declination:{:.1f} degrees\n".format(point.declination)
-    elif point.style == point.Point.POINT_RUNWAY:
-      kml_doc = self.runways
-      identifier = "{}_{}".format(point.airport, point.name)
-      description += "Length:{:.0f} feet\n".format(point.length_ft)
-      description += "Elevation:{} feet\n".format(point.elevation_ft)
-      description += "Runway Heading (mag):{:.1f} degrees\n".format(point.bearing)
-      description += "Ruway Width:{:.0f} feet\n".format(point.width_ft)
-      description += "Threshold Crossover Height:{} feet\n".format(point.tch_ft)
-      description += "Displaced Threshold Distance:{} feet\n".format(point.dthreshold_ft)
-    else:
-      print("Unknown Point Style: {}".format(point))
-    
-    # add the cifp_point
-    pnt = kml_doc.newpoint(name=identifier, description=description, coords=[location])
-    
-    # configure the cifp_point
-    if point.elevation_ft != None:
-      pnt.lookat = simplekml.LookAt(altitudemode=simplekml.AltitudeMode.absolute,
-                                    latitude=point.latitude,
-                                    longitude=point.longitude,
-                                    range=15000, heading=0.0, tilt=0.0)
-    else:
-      pnt.lookat = simplekml.LookAt(altitudemode=simplekml.AltitudeMode.clamptoground,
-                                    latitude=point.latitude,
-                                    longitude=point.longitude,
-                                    range=15000, heading=0.0, tilt=0.0)
-    
-    pnt.style.iconstyle.icon.href = "http://maps.google.com/mapfiles/kml/shapes/placemark_square.png"
-    
-    return
-
-class ShapesOut:
-  
-  OUTCOLOR_RED = 0
-  OUTCOLOR_ORANGE = 1
-  OUTCOLOR_YELLOW = 2
-  OUTCOLOR_GREEN = 3
-  OUTCOLOR_AQUA = 4
-  OUTCOLOR_BLUE = 5
-  OUTCOLOR_MAGENTA = 6
-  OUTCOLOR_WHITE = 7
-  OUTCOLOR_GRAY = 8
-  
-  def __init__(self, path, filename, folder_name):
-    # open and configure the kml file
-    self.kml_filename = path + '\\' + filename + '.kml'
-    self.configure_kml(folder_name)
-    
-    # open the outfile
-    self.outfile = open(path + '\\' + filename + '.out', 'w')
-    
-    # instance necessary variables
-    self.folders = {}
-    
-    return
-  
-  def save_files(self):
-    # save the kml file
-    self.kml.save(self.kml_filename)
-    
-    # finish the outfile
-    self.outfile.close()
-    
-    return
-  
-  def configure_kml(self, folder_name):
-    # create the kml document
-    self.kml = simplekml.Kml()
-    
-    # create the top level folder
-    self.kml.document.name = folder_name
-    
-    return
-  
-  def add_shape(self, airport, feature, description, shape, kmlcolor=simplekml.Color.blue, outcolor=OUTCOLOR_BLUE):
-    """
-    airport: airport id (i.e. KDEN)
-    feature: feature type (i.e. Class B Sequence A)
-    description: note (i.e. Runway Length:9000 feet...)
-    
-    """
-    # get or build the kml folder
-    if airport not in self.folders:
-      self.folders[airport] = self.kml.newfolder(name=airport)
-    folder = self.folders[airport]
-    
-    # prepare the outfile
-    self.outfile.write("{{{}_{}}}\n".format(airport, feature))
-    self.outfile.write("$TYPE={}\n".format(outcolor))
-    
-    # get the coordinates in the kml format
-    coords = []
-    for point in shape:
-      coords.append((point[1], point[0]))
-      self.outfile.write("{:.6f}+{:.6f}\n".format(point[0], point[1]))
-    
-    # add the shape
-    line = folder.newlinestring(name="{}".format(feature),
-                                coords=coords,
-                                altitudemode=simplekml.AltitudeMode.clamptoground,
-                                description=description)
-    line.style.linestyle.width = 2
-    line.style.linestyle.color = kmlcolor
-    
-    # finish the outfile shape
-    self.outfile.write("-1\n")
-    
-    return
-  
+    return new_ident
 
 def process_airport(cifp, airport, include_missed):
   print("Processing {} ========================".format(airport))
-  cifp.build_procedures(airport, include_missed)
+  cifp.build_airport(airport, include_missed)
   return
 
-VERSION = "1.0"
+def process_center_boundaries(filename, outpath):
+  print("Processing ARTCC Boundaries")
+  
+  # output the boundaries to kml and out files
+  kml = kmlout.KMLOutput("ARTCC", outpath+"\\USA_ARTCC.kml")
+  
+  # open the outfile
+  outfile = open(outpath+"\\USA_ARTCC.out", "w")
+  outfile.write("$TYPE={}\n".format(CIFPReader.OUTCOLOR_GRAY))
+  
+  firstline = True
+  artcc = {}
+  with open(filename, "r") as csvfile:
+    for line in csvfile:
+      # skip the header
+      if firstline:
+        firstline = False
+        continue
+      
+      # parse the data
+      if line[0] == "Z":
+        point = line.rstrip().split(",")
+        ctr = point[0]
+        latdeg = int(point[3][0:2])
+        latmin = int(point[3][2:4])
+        latsec = int(point[3][4:8])/100.0
+        lathem = point[3][8]
+        londeg = int(point[4][0:3])
+        lonmin = int(point[4][3:5])
+        lonsec = int(point[4][5:9])/100.0
+        lonhem = point[4][9]
+        position = maptools.dms2deg(lathem, latdeg, latmin, latsec, lonhem, londeg, lonmin, lonsec)
+        
+        # add the point
+        if ctr not in artcc:
+          artcc[ctr] = []
+          print("   Processing {} Center".format(ctr))
+        artcc[ctr].append(position)
+  
+
+  
+  for ctr, shape in artcc.items():
+    # add a folder
+    folder = kml.create_folder(ctr)
+    
+    kml.add_line(folder, ctr, shape, simplekml.Color.gray)
+    
+    for pt in shape:
+      outfile.write("{:.6f}+{:.6f}\n".format(*pt))
+    outfile.write("-1\n")
+  
+  outfile.close()
+  kml.savefile()
+  
+  return
+  
+
 
 if __name__ == '__main__':
   # when this file is run directly, run this code
-  print(VERSION)
   
-  # define the area of interest
-  lat_min = 35.5
-  lat_max = 44.5
-  lon_min = -110.0
-  lon_max = -98.0
+  # process the center boundaries
+  # https://www.faa.gov/air_traffic/flight_info/aeronav/Aero_Data/Center_Surface_Boundaries/
+  process_center_boundaries(r"C:\Data\CIFP\ERAM_200618\Ground_Level_ARTCC_Boundary_Data_2020-06-18.csv", r"C:\Data\CIFP\ERAM_200618" )
   
-  cifp = CIFPReader(r"C:\Data\CIFP", "CIFP_200716", lat_min, lat_max, lon_min, lon_max)
+  # process the CIFP file
+  # lat_min = 35.5
+  # lat_max = 44.5
+  # lon_min = -110.0
+  # lon_max = -98.0
+  cifp = CIFPReader(r"C:\Data\CIFP", "CIFP_200716") #, lat_min, lat_max, lon_min, lon_max)
+  
+  # build the national items
+  cifp.build_nationwide_items()
   
   # build all procedures
   #for airport in cifp.usa.airports.keys():
   #  process_airport(cifp, airport)
   
-  # build select procedures
+  # build select procedures for every airport with a tower in our area, plus a few others
   process_airport(cifp, "KDEN", False)
   process_airport(cifp, "KBJC", False)
   process_airport(cifp, "KEIK", False)
   process_airport(cifp, "KLMO", False)
+  process_airport(cifp, "KAPA", False)
   process_airport(cifp, "KASE", False)
   process_airport(cifp, "KEGE", False)
   process_airport(cifp, "KFNL", False)
   process_airport(cifp, "KGXY", False)
   process_airport(cifp, "KSBS", False)
-  #process_airport(cifp, "KDDC", False)
-  #process_airport(cifp, "KGJT", False)
-  #process_airport(cifp, "KHON", False)
-  #process_airport(cifp, "KSAF", False)
+  process_airport(cifp, "KJFK", False)
+  process_airport(cifp, "KSFO", False)
+  process_airport(cifp, "KLAS", False)
   
   print("Done.")
   

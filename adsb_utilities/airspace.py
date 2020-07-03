@@ -69,7 +69,7 @@ class AirspaceShape:
         print("AirspaceShape.build_airspace_shape: Arc by edge not yet supported")
       elif via == "C":
         # circle
-        shape = maptools.circle((self.ar[0].arc_origin_latitude, self.ar[0].arc_origin_longitude), self.ar[0].arc_distance)
+        shape = maptools.circle((self.ar[0].arc_origin_latitude, self.ar[0].arc_origin_longitude), self.ar[0].arc_distance_nm)
       elif via == "G":
         # Great circle cifp_point
         # if this is an end, add the first cifp_point otherwise add the next cifp_point
@@ -110,7 +110,7 @@ class AirspaceShape:
           # UC Airspace
           name = "Class {} Section {}".format(self.ar[i].airspace_classification, self.ar[i].multiple_code)
         else:
-          name = "{} Section {}".format(self.ar[i].airspace_designation, self.ar[i].multiple_code)
+          name = "{},{}".format(self.ar[i].airspace_designation, self.ar[i].multiple_code)
         
         # build the arc
         arc = maptools.arc_path(arc_begin, arc_end, arc_center, radius_nm, clockwise, name)
@@ -231,7 +231,11 @@ class AirspaceRecord:
     # SUSAURK2MCOUGAR H  A00700L    GEN38344100W103000000                                                                        580351703
     # 123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012
     #          1         2         3         4         5         6         7         8         9         10        11        12        13
-    self.airspace_designation = record[9:19].rstrip()
+    if record[9].isdigit():
+      self.airspace_designation = record[8:19].rstrip()
+    else:
+      self.airspace_designation = record[9:19].rstrip()
+    
     
     # unused records
     self.airport = None
@@ -240,7 +244,7 @@ class AirspaceRecord:
     self.controlling_agency = None
     
     # same as UC
-    self.airspace_type = record[8]  # eg: self.TYPE_RESTRICTIVE_PROHIBITED
+    self.airspace_type = record[8]  # eg: self.TYPE_RESTRICTIVE_PROHIBITED    
     self.multiple_code = record[19] # designator defining airspace section (A-)...airspace with only one section will only have A
     self.sequence_number = int(record[20:24])
     self.continuation_count = cf.parse_int(record[24])
@@ -258,7 +262,10 @@ class AirspaceRecord:
   def parse_continuation_record(self, record):
     # Continuation Types (5.91, p 105)
     # C - Call Sign/Controlling Agency
-    self.airspace_designation = record[9:19].rstrip()
+    if record[9].isdigit():
+      self.airspace_designation = record[8:19].rstrip()
+    else:
+      self.airspace_designation = record[9:19].rstrip()
     
     # same as UC
     self.multiple_code = record[19] # designator defining airspace section (A-)...airspace with only one section will only have A

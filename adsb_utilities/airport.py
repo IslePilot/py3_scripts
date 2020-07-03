@@ -104,9 +104,7 @@ class Airport:
       return self.approaches[ident].build_procedure_shape(self.D, self.DB, self.EA, self.ndbs, self.waypoints, self.runways, self.ils, self.reference_point, self.elevation_ft, include_missed)
     
     return None
-    
-    
-    
+  
   def add_procedure(self, procedure_record):
     if procedure_record.subsection_code == "D":
       # Standard Instrument Departures (SIDS)

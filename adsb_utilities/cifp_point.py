@@ -33,7 +33,7 @@ class CIFPPointSet:
   """a set of Points of similar type (i.e. vors or ndbs)"""
   
   def __init__(self):
-    self.points = {}  # dictionary of points, key is ident
+    self.points = {}  # dictionary of CIFPPoint, key is ident
     
     return
   
@@ -169,6 +169,7 @@ class CIFPPointSet:
     
     return point_list
 
+    
 class CIFPPoint:
   """Points are locations in 3D space and include VORs, NDBs, Waypoints, 
   runway locations, and airport locations"""

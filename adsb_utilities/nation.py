@@ -59,7 +59,7 @@ class NationalAirspace:
     self.enroute_airways = {} # dictionary of Airways, key ID of the airway i.e. V85, J56, Q88
     
     # UR
-    self.restrictive_airspace = {} # dictionary containing AirspaceShapes, key is "<airspace_designation> Section <multiple_code>"
+    self.restrictive_airspace = {} # dictionary containing AirspaceShapes, key is "<airspace_designation>,<multiple_code>"
     
     return
   
@@ -75,7 +75,7 @@ class NationalAirspace:
   
   def add_airspace(self, airspace_record):
     # identify where this airspace record belongs
-    key = "{} Section {}".format(airspace_record.airspace_designation, airspace_record.multiple_code)
+    key = "{},{}".format(airspace_record.airspace_designation, airspace_record.multiple_code)
     
     # add this key if it doesn't already exist
     if key not in self.restrictive_airspace:
