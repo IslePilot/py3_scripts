@@ -296,7 +296,7 @@ class Procedure:
     
     # if this is an instrument approach, we want to start at an appropriate fix
     if self.procedure_type == self.PROCEDURE_APPROACH:
-      armed = False
+      armed = True  # False - this logic may be flawed...change for now to allow all points
     else:
       armed = True
     

@@ -51,7 +51,7 @@ def circle(origin, radius_nm):
   
   # figure out how many steps we need to take
   steps = 120
-  stepsize = 3.0
+  stepsize = 6.0
   
   arclist = []
   for i in range(steps+1):
@@ -104,10 +104,10 @@ def arc_path(arc_begin, arc_end, arc_center, radius_nm, clockwise, name):
       degrees_of_turn = (bearing2-360.0) - bearing1
   
   # figure out how many steps we need to take
-  if abs(degrees_of_turn) < 6.0:
+  if abs(degrees_of_turn) < 12.0:
     steps = 2
   else:
-    steps = int(abs(degrees_of_turn)/3.0)+1
+    steps = int(abs(degrees_of_turn)/6.0)+1
   stepsize = degrees_of_turn / float(steps)
   
   arclist = []
@@ -612,7 +612,7 @@ def arcpoints(waypoint1, waypoint2, radius_nm, heading1_deg_mag, heading2_deg_ma
       degrees_of_turn = 360.0 - bearing2 + bearing1
   
   # figure out how many steps we need to take
-  steps = int(degrees_of_turn/3.0)+1
+  steps = int(degrees_of_turn/6.0)+1
   stepsize = degrees_of_turn / float(steps)
   
   arclist = []

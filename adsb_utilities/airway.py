@@ -87,7 +87,7 @@ class Airway:
       elif af.fix_section == "EA":
         info = ea.get_point(ident)
       
-      fix_list.append((ident, info[0], info[1]))
+      fix_list.append((info.ident, info.latlon, info.description))
       
     return fix_list
     

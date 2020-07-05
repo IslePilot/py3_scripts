@@ -24,10 +24,16 @@ Revision History:
   Jul 4, 2020, ksb, created
 """
 
+import sys
+sys.path.append("..")
+import __common.filetools as ft
+
 import cifp_processor
+import kml_output
+
+import simplekml
 
 from collections import namedtuple
-
 Waypoint = namedtuple('Waypoint', 'ident, latitude, longitude')
 
 class RouteProcessor:
@@ -80,7 +86,12 @@ class RouteProcessor:
     
     self.route = fpr.split(" ")
     
-    print("Processing {} {} {}".format(self.dep.ident, fpr, self.arr.ident))
+    route = "{}.".format(self.dep.ident)
+    for item in self.route:
+      route += "{}.".format(item)
+    route += "{}".format(self.arr.ident)
+    
+    print("Processing {}".format(route))
     
     # we have the input, now process the route
     return self.process_route()
@@ -92,7 +103,7 @@ class RouteProcessor:
     route.append(Waypoint(self.dep.ident, self.dep.latitude, self.dep.longitude))
     
     # get the SID
-    sid_route = self.get_sid_route()
+    sid_route = self.get_sid_route(self.route[0], self.route[1])
     if sid_route == False:
       return False
     elif sid_route != None:
@@ -100,7 +111,12 @@ class RouteProcessor:
         route.append(wp)
 
     # get the STAR (this will remove the STAR from our route, to clean up processing below
-    star_route = self.get_star_route()
+    if len(self.route) > 1:
+      star_route = self.get_star_route(self.route[-2], self.route[-1])
+    elif len(self.route) > 0:
+      star_route = self.get_star_route(None, self.route[-1])
+    else:
+      star_route = self.get_star_route(None, None)
     
     # our route now only contains waypoints and airways add them to our route
     for i in range(len(self.route)):
@@ -111,21 +127,24 @@ class RouteProcessor:
         
         # add each point to our route
         for fix in airway:
-          if route[-1].ident != fix[0]:
+          if route[-1].ident != fix[0] or route[-1].ident == None:
             route.append(Waypoint(fix[0], fix[1][0], fix[1][1]))
       
       else:
         # this is a waypoint
-        if route[-1].ident != self.route[i]:
+        if route[-1].ident != self.route[i] or route[-1].ident == None:
+          fix = self.route[i].rstrip()
+          
           # add our point
-          if self.cifp.usa.vors.has_point(self.route[i]):
-            point = self.cifp.usa.get_vor(self.route[i])
-          elif self.cifp.usa.ndbs.has_point(self.route[i]):
-            point = self.cifp.usa.get_ndb(self.route[i])
-          elif self.cifp.usa.enroute_waypoints.has_point(self.route[i]):
-            point = self.cifp.usa.get_waypoint(self.route[i])
+          if self.cifp.usa.vors.has_point(fix):
+            point = self.cifp.usa.get_vor(fix)
+          elif self.cifp.usa.ndbs.has_point(fix):
+            point = self.cifp.usa.get_ndb(fix)
+          elif self.cifp.usa.enroute_waypoints.has_point(fix):
+            point = self.cifp.usa.get_waypoint(fix)
           else:
-            print("Item not a VOR, NDB, or Enroute Waypoint: {}".format(self.route[1]))
+            print("Item not a VOR, NDB, or Enroute Waypoint: {}".format(fix))
+            continue
           
           # add our point
           route.append(Waypoint(point.ident, point.latlon[0], point.latlon[1]))
@@ -135,52 +154,81 @@ class RouteProcessor:
       return False
     elif star_route != None:
       for wp in star_route:
-        route.append(wp)
+        if route[-1].ident != wp.ident or route[-1].ident == None:
+          route.append(wp)
     
     # add an approach
+    # find the last real previous fix (it could be a no-name manual termination point)
+    appr_route = self.get_appr_route(route[-1].ident)
+    
+    if appr_route == False:
+      return False
+    
+    # it is possible the first point in our appr route is one we recently "passed."  If so, find it and remove that
+    # point and the ones after that
+    if appr_route[0].ident == route[-1].ident:
+      route.pop(-1) # remove the first point in the approach
+    elif appr_route[0].ident == route[-2].ident:
+      route.pop(-1) # remove the manual termination
+      route.pop(-1) # remove the first point in the approach
+    
+    # now add the approach
+    if appr_route != None:
+      for wp in appr_route:
+        if route[-1].ident != wp.ident or route[-1].ident == None:
+          route.append(wp)   
     
     # now finish up with the arrival airport
     route.append(Waypoint(self.arr.ident, self.arr.latitude, self.arr.longitude))
     
     # now show the whole route
+    i=1
     for wp in route:
-      print("{}: ({:.6f}, {:.6f})".format(*wp))
-      
+      print("{} {}: ({:.6f}, {:.6f})".format(i, *wp))
+      i+=1
     
-    
-    return True
+    return route
   
-  def get_sid_route(self):
+  def get_sid_route(self, sid_name, enr_transition):
+    # the enr_transition needs to be 5 characters
+    if enr_transition != None:
+      while len(enr_transition) < 5:
+        enr_transition += " "
+    
     # build a list of sids
     sids = list(self.dep.sids.keys())
     
-    # find out which SID we are using
-    for i in range(len(sids)):
-      print("{:2d}: {}".format(i, sids[i]))
-    # get the user input
-    sid_index = input("Enter SID Number (X to exit, return for none): ")
+    # if the sid_name is in the list, use that, otherwise query the user
+    if sid_name not in sids:
+      # find out which SID we are using
+      for i in range(len(sids)):
+        print("{:2d}: {}".format(i, sids[i]))
+      # get the user input
+      sid_index = input("Enter SID Number (X to exit, return for none): ")
+      
+      if sid_index == "X":
+        return False
+      elif sid_index == "":
+        return None
+      else:
+        # get the SID
+        sid_name = sids[int(sid_index)]
     
-    if sid_index == "X":
-      return False
-    elif sid_index == "":
-      return None
-    else:
-      # get the SID
-      sid_name = sids[int(sid_index)]
-      sid = self.dep.sids[sid_name]
-      print("SID Chosen: {}".format(sid_name))
+    # set our SID
+    sid = self.dep.sids[sid_name]
     
     # clean up our route
     if sid_name in self.route:
       self.route.remove(sid_name)
-      
+    
     # choose the runway transition
     rw = False
+    rw_transition = ""
     rw_transitions = list(sid.runway_transitions.keys())
     if len(rw_transitions) > 0:
       for i in range(len(rw_transitions)):
         print("{:2d}: {}".format(i, rw_transitions[i]))
-      rw_transition_index = input("Enter Runway Transition Number (X to exit, return for none): ")
+      rw_transition_index = input("Enter Departure Runway Number (X to exit, return for none): ")
     
       if rw_transition_index == "X":
         return False
@@ -193,23 +241,32 @@ class RouteProcessor:
     # choose the enroute transition
     enr = False
     enr_transitions = list(sid.enroute_transistions.keys())
-    if len(enr_transitions) > 0:
-      for i in range(len(enr_transitions)):
-        print("{:2d}: {}".format(i, enr_transitions[i]))
-      enr_transition_index = input("Enter Enroute Transition Number (X to exit, return for none): ")
-      
-      if enr_transition_index == "X":
-        return False
-      elif enr_transition_index == "":
-        enr_transition = None
-      else:
-        enr_transition = enr_transitions[int(enr_transition_index)]
-        enr = True
     
-        # clean up our route
-        if enr_transition in self.route:
-          self.route.remove(enr_transition)
-
+    if enr_transition not in enr_transitions:
+      if len(enr_transitions) > 0:
+        for i in range(len(enr_transitions)):
+          print("{:2d}: {}".format(i, enr_transitions[i]))
+        enr_transition_index = input("Enter Enroute Transition Number (X to exit, return for none): ")
+        
+        if enr_transition_index == "X":
+          return False
+        elif enr_transition_index == "":
+          enr_transition = ""
+        else:
+          enr_transition = enr_transitions[int(enr_transition_index)]
+          enr = True
+      else:
+        enr_transition = ""
+    else:
+      enr = True
+    
+      # clean up our route
+      if enr_transition in self.route:
+        self.route.remove(enr_transition)
+    
+    # show the user our SID
+    print("Full SID: {} {} {}".format(rw_transition, sid_name, enr_transition))
+    
     # build the sid routes
     routes = self.cifp.usa.build_procedure_tracks(self.dep.ident, sid_name, "SID")
     
@@ -221,39 +278,49 @@ class RouteProcessor:
         route.append(Waypoint(wp.ident, wp.latlon[0], wp.latlon[1]))
     
     # common route
-    if "     " in routes:
-      for wp in routes["     "]:
-        if route[-1].ident != wp.ident:
+    common = "     "
+    if "ALL  " in routes:
+      common = "ALL  "
+      
+    if common in routes:
+      for wp in routes[common]:
+        if route[-1].ident != wp.ident or route[-1].ident == None:
           route.append(Waypoint(wp.ident, wp.latlon[0], wp.latlon[1]))
     
     # entroute transition
     if enr:
       for wp in routes[enr_transition]:
-        if route[-1].ident != wp.ident:
+        if route[-1].ident != wp.ident or route[-1].ident == None:
           route.append(Waypoint(wp.ident, wp.latlon[0], wp.latlon[1]))
     
     return route
   
-  def get_star_route(self):
+  def get_star_route(self, enr_transition, star_name):
+    # the enr_transition needs to be 5 characters
+    if enr_transition != None:
+      while len(enr_transition) < 5:
+        enr_transition += " "
+    
     # build a list of stars
     stars = list(self.arr.stars.keys())
     
-    # find out which STAR we are using
-    for i in range(len(stars)):
-      print("{:2d}: {}".format(i, stars[i]))
-    # get the user input
-    star_index = input("Enter STAR Number (X to exit, return for none): ")
-    
-    if star_index == "X":
-      return False
-    elif star_index == "":
-      return True
-    else:
-      # get the STAR
-      star_name = stars[int(star_index)]
-      print("{}".format(star_name))
-      star = self.arr.stars[star_name]
-      print("SID Chosen: {}".format(star_name))
+    # if the star_name isn't in the list, query the user
+    if star_name not in stars:
+      # find out which STAR we are using
+      for i in range(len(stars)):
+        print("{:2d}: {}".format(i, stars[i]))
+      # get the user input
+      star_index = input("Enter STAR Number (X to exit, return for none): ")
+      
+      if star_index == "X":
+        return False
+      elif star_index == "":
+        return None
+      else:
+        # get the STAR
+        star_name = stars[int(star_index)]
+        
+    star = self.arr.stars[star_name]
     
     # clean up our route
     if star_name in self.route:
@@ -262,25 +329,30 @@ class RouteProcessor:
     # choose the enroute transition
     enr = False
     enr_transitions = list(star.enroute_transistions.keys())
-    if len(enr_transitions) > 0:
-      for i in range(len(enr_transitions)):
-        print("{:2d}: {}".format(i, enr_transitions[i]))
-      enr_transition_index = input("Enter Enroute Transition Number (X to exit, return for none): ")
-      
-      if enr_transition_index == "X":
-        return False
-      elif enr_transition_index == "":
-        enr_transition = None
-      else:
-        enr_transition = enr_transitions[int(enr_transition_index)]
-        enr = True
     
-        # clean up our route
-        if enr_transition in self.route:
-          self.route.remove(enr_transition)
+    if enr_transition not in enr_transitions:
+      if len(enr_transitions) > 0:
+        for i in range(len(enr_transitions)):
+          print("{:2d}: {}".format(i, enr_transitions[i]))
+        enr_transition_index = input("Enter Enroute Transition Number (X to exit, return for none): ")
+        
+        if enr_transition_index == "X":
+          return False
+        elif enr_transition_index == "":
+          enr_transition = None
+        else:
+          enr_transition = enr_transitions[int(enr_transition_index)]
+          enr = True
+    else:
+      enr = True
+      
+      # clean up our route
+      if enr_transition in self.route:
+        self.route.remove(enr_transition)
     
     # choose the runway transition
     rw = False
+    rw_transition = ""
     rw_transitions = list(star.runway_transitions.keys())
     if len(rw_transitions) > 0:
       for i in range(len(rw_transitions)):
@@ -295,6 +367,9 @@ class RouteProcessor:
         rw_transition = rw_transitions[int(rw_transition_index)]
         rw = True
 
+    # show the user our SID
+    print("Full STAR: {} {} {}".format(enr_transition, star_name, rw_transition))
+    
     # build the star routes
     routes = self.cifp.usa.build_procedure_tracks(self.arr.ident, star_name, "STAR")
     
@@ -313,26 +388,137 @@ class RouteProcessor:
       
     if common in routes:
       for wp in routes[common]:
-        if route[-1].ident != wp.ident:
+        if route[-1].ident != wp.ident or route[-1].ident == None:
           route.append(Waypoint(wp.ident, wp.latlon[0], wp.latlon[1]))
     
     # runway transition
     if rw:
       for wp in routes[rw_transition]:
-        if route[-1].ident != wp.ident:
+        if route[-1].ident != wp.ident or route[-1].ident == None:
           route.append(Waypoint(wp.ident, wp.latlon[0], wp.latlon[1]))
     
     return route
+  
+  def get_appr_route(self, ap_transition):
+    # the enr_transition needs to be 5 characters
+    if ap_transition != None:
+      while len(ap_transition) < 5:
+        ap_transition += " "
     
+    # build a list of approaches
+    apprs = list(self.arr.approaches.keys())
+    
+    # query the user which approach 
+    for i in range(len(apprs)):
+      print("{:2d}: {}".format(i, apprs[i]))
+    # get the user input
+    appr_index = input("Enter the Approach Number (X to exit, return for none):")
+    
+    if appr_index == 'X':
+      return False
+    if appr_index == '':
+      return None
+    else:
+      # get the approach
+      appr_name = apprs[int(appr_index)]
+    
+    appr = self.arr.approaches[appr_name]
+    print("Approach: {}".format(appr_name))
+      
+    # choose the transition
+    apt = False
+    ap_transitions = list(appr.approach_transition.keys())
+    
+    if ap_transition not in ap_transitions:
+      if len(ap_transitions) > 0:
+        for i in range(len(ap_transitions)):
+          print("{:2d}: {}".format(i, ap_transitions[i]))
+        ap_transition_index = input("Enter Approach Transition Number (X to exit, return for none): ")
+      
+        if ap_transition_index == "X":
+          return False
+        elif ap_transition_index == "":
+          ap_transition = None
+        else:
+          ap_transition = ap_transitions[int(ap_transition_index)]
+          apt = True
+    else:
+      apt = True
+      
+      # clean up our route
+      if ap_transition in self.route:
+        self.route.remove(ap_transition)
+      
+    print("Approach Transition via {}".format(ap_transition))
+
+    # build the appr routes
+    routes = self.cifp.usa.build_procedure_tracks(self.arr.ident, appr_name, "APPROACH")
+    
+    # build our requested route
+    route = []
+    # runway transition
+    if apt:
+      for wp in routes[ap_transition]:
+        route.append(Waypoint(wp.ident, wp.latlon[0], wp.latlon[1]))
+    
+    # common route
+    common = "     "
+    if "ALL  " in routes:
+      common = "ALL  "
+      
+    if common in routes:
+      for wp in routes[common]:
+        if route[-1].ident != wp.ident or route[-1].ident == None:
+          route.append(Waypoint(wp.ident, wp.latlon[0], wp.latlon[1]))
+    
+    return route
+
 if __name__ == '__main__':
   # when this file is run directly, run this code
   # get the basic info from the user
   print("Initializing Databse...stand by")
   rp = RouteProcessor(r"C:\Data\CIFP", "CIFP_200716")
   
-  status = True
-  while status:
-    status = rp.enter_route()
+  ft.mkdir(r"C:\Data\CIFP\CIFP_200716\routes")
+  kml = kml_output.KMLOutput("Routes", r"C:\Data\CIFP\CIFP_200716\routes\routes.kml")
+  
+  route = True
+  while route != False:
+    route = rp.enter_route()
+    
+    if route != False:
+      route_name = "{}-{}".format(route[0].ident, route[-1].ident)
+      
+      # build a text file for AVARE
+      txt = open(r"C:\Data\CIFP\CIFP_200716\routes\{}.txt".format(route_name), "w")
+      for wp in route:
+        
+        if wp.ident != None and wp.ident[:2] != "RW":
+          txt.write("{} ".format(wp.ident))
+        else:
+          txt.write("{:.4f}&{:.4f} ".format(wp.latitude, wp.longitude))
+      txt.write("\n")
+      txt.close()
+      
+      # build a kml file for Google Earth
+      folder = kml.create_folder("{}".format(route_name))
+      
+      # now add the waypoints...don't add the first or last as they are just the airport
+      track = []
+      for wp in route[1:-1]:
+        # get this ready for the kml file as long as we are looping
+        track.append((wp.latitude, wp.longitude))
+        
+        if wp.ident != None:
+          kml.add_point(folder, wp.ident, (wp.latitude, wp.longitude), "")
+        else:
+          kml.add_point(folder, "", (wp.latitude, wp.longitude), "")
+      
+      # add the track
+      kml.add_line(folder, "Flight Route", track, simplekml.Color.red)
+      
+      kml.savefile()
+      
   
   print("Terminating")
       

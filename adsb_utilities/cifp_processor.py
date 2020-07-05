@@ -811,14 +811,20 @@ if __name__ == '__main__':
   process_airport(cifp, "KEIK", False)
   process_airport(cifp, "KLMO", False)
   process_airport(cifp, "KAPA", False)
-  process_airport(cifp, "KASE", False)
-  process_airport(cifp, "KEGE", False)
   process_airport(cifp, "KFNL", False)
   process_airport(cifp, "KGXY", False)
+  process_airport(cifp, "KASE", False)
+  process_airport(cifp, "KEGE", False)
   process_airport(cifp, "KSBS", False)
+  
   process_airport(cifp, "KJFK", False)
   process_airport(cifp, "KSFO", False)
   process_airport(cifp, "KLAS", False)
+  process_airport(cifp, "KMEM", False)
+  process_airport(cifp, "KEWR", False)
+  process_airport(cifp, "KORD", False)
+  
+  process_airport(cifp, "KATL", False)
   
   print("Done.")
   
