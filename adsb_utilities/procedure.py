@@ -302,7 +302,6 @@ class Procedure:
     
     for key, prs in procedure_records.items():
       routes[key] = []
-      print("     ", key)
       end_of_procedure = False  # only used when missed approach is NOT requested
       for pr in prs:
         # should we stop processing?

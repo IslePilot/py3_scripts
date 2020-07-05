@@ -37,6 +37,8 @@ class Airport:
     self.airport = self.reference_point.airport
     self.ident = self.reference_point.ident
     self.elevation_ft = self.reference_point.elevation_ft
+    self.latitude = self.reference_point.latitude
+    self.longitude = self.reference_point.longitude
             
     # initialize holders
     self.runways = cp.CIFPPointSet()

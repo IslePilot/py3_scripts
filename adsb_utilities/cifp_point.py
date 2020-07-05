@@ -37,6 +37,11 @@ class CIFPPointSet:
     
     return
   
+  def has_point(self, ident):
+    if ident in self.points:
+      return True
+    return False
+  
   def add_point(self, point):
     self.points[point.ident] = point
     return
