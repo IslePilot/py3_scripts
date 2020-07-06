@@ -75,6 +75,22 @@ class CIFPReader:
     
     return
   
+  def process_terminal_waypoints(self, *argv):
+    # build the KML base
+    kml = kmlout.KMLOutput("Terminal Waypoints", self.outpath+"{}_Terminal_Waypoints.kml".format(argv[0]))
+    
+    for airport in argv:
+      # build a folder for this airport
+      folder = kml.create_folder("{}".format(airport))
+      
+      waypoints = self.usa.airports[airport].get_waypoints()
+      for waypoint in waypoints:
+        kml.add_point(folder, waypoint[0], waypoint[1], waypoint[3])
+    
+    kml.savefile()
+    
+    return      
+      
   def build_nationwide_items(self):
     """ build the nationwide items for the USA"""
     # build the KML base
@@ -120,7 +136,7 @@ class CIFPReader:
     restricted_airspace = self.kml.create_folder("Restricted Airspace")
     outfile = open(self.outpath+"USA_RestrictedAirspace.out", "w")
     outfile.write("{{USA Restricted Airspace}}\n")
-    outfile.write("$TYPE={}\n".format(self.OUTCOLOR_ORANGE))
+    outfile.write("$TYPE={}\n".format(self.OUTCOLOR_MAGENTA))
     
     ra_folders = {}
     for key, ashape in self.usa.restrictive_airspace.items():
@@ -218,7 +234,7 @@ class CIFPReader:
       self.build_output(routes, tracks, fixes, simplekml.Color.red)
       
       # build the out and GPX files
-      self.build_pp_files(routes, "STAR", airport, name, self.OUTCOLOR_BLUE)
+      self.build_pp_files(routes, "STAR", airport, name, self.OUTCOLOR_AQUA)
       
       added_data = True
     
@@ -238,7 +254,7 @@ class CIFPReader:
       added_data = True
       
       # build the out and GPX files
-      self.build_pp_files(routes, "SIDS", airport, name, self.OUTCOLOR_GRAY)
+      self.build_pp_files(routes, "SIDS", airport, name, self.OUTCOLOR_RED)
     
     # process the Approaches
     approaches = self.kml.create_folder("APPROACHES")
@@ -256,7 +272,7 @@ class CIFPReader:
       added_data = True
       
       # build the out and GPX files
-      self.build_pp_files(routes, "APPR", airport, name, self.OUTCOLOR_BLUE)
+      self.build_pp_files(routes, "APPR", airport, name, self.OUTCOLOR_AQUA)
     
     # add the airspace
     airspace = self.kml.create_folder("AIRSPACE")
@@ -807,6 +823,8 @@ if __name__ == '__main__':
   
   # build select procedures for every airport with a tower in our area, plus a few others
   process_airport(cifp, "KDEN", False)
+  cifp.process_terminal_waypoints("KDEN", "KBJC")
+   
   process_airport(cifp, "KBJC", False)
   process_airport(cifp, "KEIK", False)
   process_airport(cifp, "KLMO", False)
@@ -818,13 +836,21 @@ if __name__ == '__main__':
   process_airport(cifp, "KSBS", False)
   
   process_airport(cifp, "KJFK", False)
+  cifp.process_terminal_waypoints("KJFK")
   process_airport(cifp, "KSFO", False)
+  cifp.process_terminal_waypoints("KSFO")
   process_airport(cifp, "KLAS", False)
+  cifp.process_terminal_waypoints("KLAS")
   process_airport(cifp, "KMEM", False)
+  cifp.process_terminal_waypoints("KMEM")
   process_airport(cifp, "KEWR", False)
+  cifp.process_terminal_waypoints("KEWR")
   process_airport(cifp, "KORD", False)
+  cifp.process_terminal_waypoints("KORD")
   
+  # PlanePlotter Requested Airports
   process_airport(cifp, "KATL", False)
+  cifp.process_terminal_waypoints("KATL")
   
   print("Done.")
   

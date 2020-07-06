@@ -423,7 +423,7 @@ class Procedure:
           direct = maptools.get_mag_heading(prev.latlon, fix.latlon, fix.declination)
           dhdg = direct - prev.heading
           
-          if abs(dhdg) < 10.0:
+          if abs(dhdg) < 10.0 or abs(dhdg) > 350.0:
             add_turn = False 
           else:
             add_turn = True
@@ -773,7 +773,7 @@ class Procedure:
           prev = routes[key][-1]
           
           dhdg = pr.magnetic_course - prev.heading
-          if abs(dhdg) < 10.0:
+          if abs(dhdg) < 10.0 or abs(dhdg) > 350.0:
               prev.heading = pr.magnetic_course
               continue
           
