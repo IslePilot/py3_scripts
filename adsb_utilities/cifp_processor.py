@@ -805,7 +805,7 @@ if __name__ == '__main__':
   
   # process the center boundaries
   # https://www.faa.gov/air_traffic/flight_info/aeronav/Aero_Data/Center_Surface_Boundaries/
-  process_center_boundaries(r"C:\Data\CIFP\ERAM_200618\Ground_Level_ARTCC_Boundary_Data_2020-06-18.csv", r"C:\Data\CIFP\ERAM_200618" )
+  ##process_center_boundaries(r"C:\Data\CIFP\ERAM_200618\Ground_Level_ARTCC_Boundary_Data_2020-06-18.csv", r"C:\Data\CIFP\ERAM_200618" )
   
   # process the CIFP file
   # lat_min = 35.5
@@ -815,7 +815,7 @@ if __name__ == '__main__':
   cifp = CIFPReader(r"C:\Data\CIFP", "CIFP_200716") #, lat_min, lat_max, lon_min, lon_max)
   
   # build the national items
-  cifp.build_nationwide_items()
+  ##cifp.build_nationwide_items()
   
   # build all procedures
   #for airport in cifp.usa.airports.keys():
@@ -823,34 +823,49 @@ if __name__ == '__main__':
   
   # build select procedures for every airport with a tower in our area, plus a few others
   process_airport(cifp, "KDEN", False)
-  cifp.process_terminal_waypoints("KDEN", "KBJC")
+  cifp.process_terminal_waypoints("KDEN")
    
   process_airport(cifp, "KBJC", False)
-  process_airport(cifp, "KEIK", False)
-  process_airport(cifp, "KLMO", False)
-  process_airport(cifp, "KAPA", False)
-  process_airport(cifp, "KFNL", False)
-  process_airport(cifp, "KGXY", False)
-  process_airport(cifp, "KASE", False)
-  process_airport(cifp, "KEGE", False)
-  process_airport(cifp, "KSBS", False)
+  cifp.process_terminal_waypoints("KBJC")
   
-  process_airport(cifp, "KJFK", False)
-  cifp.process_terminal_waypoints("KJFK")
-  process_airport(cifp, "KSFO", False)
-  cifp.process_terminal_waypoints("KSFO")
-  process_airport(cifp, "KLAS", False)
-  cifp.process_terminal_waypoints("KLAS")
-  process_airport(cifp, "KMEM", False)
-  cifp.process_terminal_waypoints("KMEM")
-  process_airport(cifp, "KEWR", False)
-  cifp.process_terminal_waypoints("KEWR")
-  process_airport(cifp, "KORD", False)
-  cifp.process_terminal_waypoints("KORD")
-  
-  # PlanePlotter Requested Airports
+  ##process_airport(cifp, "KEIK", False)
+  ##process_airport(cifp, "KLMO", False)
+  ##process_airport(cifp, "KAPA", False)
+  ##process_airport(cifp, "KFNL", False)
+  ##process_airport(cifp, "KGXY", False)
+  ##process_airport(cifp, "KASE", False)
+  ##process_airport(cifp, "KEGE", False)
+  ##process_airport(cifp, "KSBS", False)
+  ##
+  ##process_airport(cifp, "KJFK", False)
+  ##cifp.process_terminal_waypoints("KJFK")
+  ##process_airport(cifp, "KSFO", False)
+  ##cifp.process_terminal_waypoints("KSFO")
+  ##process_airport(cifp, "KLAS", False)
+  ##cifp.process_terminal_waypoints("KLAS")
+  ##process_airport(cifp, "KMEM", False)
+  ##cifp.process_terminal_waypoints("KMEM")
+  ##process_airport(cifp, "KEWR", False)
+  ##cifp.process_terminal_waypoints("KEWR")
+  ##process_airport(cifp, "KORD", False)
+  ##cifp.process_terminal_waypoints("KORD")
+  ##
+  ### PlanePlotter Requested Airports
   process_airport(cifp, "KATL", False)
-  cifp.process_terminal_waypoints("KATL")
+  cifp.process_terminal_waypoints("KATL") # Requested by Greg Gilbert greggilbert195@gmail.com
+  process_airport(cifp, "KJAX", False)
+  cifp.process_terminal_waypoints("KJAX") # Requested by Gary Moyer zonian149@gmail.com
+  process_airport(cifp, "KALB", False)
+  cifp.process_terminal_waypoints("KALB")  # Requested by David Stark 
+  process_airport(cifp, "KBOS", False)
+  cifp.process_terminal_waypoints("KBOS")  # Requested by David Stark 
+  process_airport(cifp, "KLGA", False)
+  cifp.process_terminal_waypoints("KLGA")  # Requested by David Stark 
+  process_airport(cifp, "KSCH", False)
+  cifp.process_terminal_waypoints("KSCH")  # Requested by David Stark 
+  
+  # process_airport(cifp, "", False)
+  # cifp.process_terminal_waypoints("")  # Requested by
   
   print("Done.")
   
