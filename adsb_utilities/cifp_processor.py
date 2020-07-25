@@ -24,6 +24,10 @@ Revision History:
   May 12, 2020, ksb, created
 """
 
+import sys
+sys.path.append("..")
+
+import __common.filetools as filetools
 
 import cifp_functions as cf
 import cifp_point as cp
@@ -37,7 +41,8 @@ import kml_output as kmlout
 
 import simplekml
 
-#import gpxpy
+import gpxpy.gpx
+
 
      
 
@@ -52,9 +57,11 @@ class CIFPReader:
   OUTCOLOR_WHITE = 7
   OUTCOLOR_GRAY = 8
   
-  def __init__(self, path, cifp_version,  lat_min=-90.0, lat_max=90.0, lon_min=-180.0, lon_max=180.0):
+  def __init__(self, path, cifp_version,  lat_min=-90.0, lat_max=90.0, lon_min=-180.0, lon_max=180.0, directory="Processed"):
     # save the filename
-    self.outpath = path+'\\'+cifp_version+'\\Processed\\'
+    self.outpath = path+'\\'+cifp_version+'\\{}\\'.format(directory)
+    filetools.mkdir(self.outpath)
+    
     self.filename = path+'\\'+cifp_version+'\\FAACIFP18'
     
     # save our boundaries
@@ -75,29 +82,56 @@ class CIFPReader:
     
     return
   
-  def process_terminal_waypoints(self, *argv):
-    # build the KML base
-    kml = kmlout.KMLOutput("Terminal Waypoints", self.outpath+"{}_Terminal_Waypoints.kml".format(argv[0]))
+  def process_terminal_waypoints(self, airport):
+    # get the waypoints
+    waypoints = self.usa.airports[airport].get_all_waypoints()
     
-    for airport in argv:
+    # build the GPX file
+    self.build_gpx_waypoints(self.outpath+"{}_Terminal_Waypoints.gpx".format(airport), waypoints)
+      
+    if len(waypoints) > 0:
+      # build the KML base
+      kml = kmlout.KMLOutput("Terminal Waypoints", self.outpath+"{}_Terminal_Waypoints.kml".format(airport))
+      
       # build a folder for this airport
       folder = kml.create_folder("{}".format(airport))
       
-      waypoints = self.usa.airports[airport].get_waypoints()
       for waypoint in waypoints:
         kml.add_point(folder, waypoint[0], waypoint[1], waypoint[3])
-    
-    kml.savefile()
+      
+      kml.savefile()
     
     return      
+  
+  def build_gpx_waypoints(self, filename, waypoints):
+    if len(waypoints) > 0:
+      # build the GPX file
+      gpx = gpxpy.gpx.GPX()
       
+      for waypoint in waypoints:
+        gpx.waypoints.append(gpxpy.gpx.GPXWaypoint(latitude=waypoint[1][0],
+                                                   longitude=waypoint[1][1], 
+                                                   name=waypoint[0], 
+                                                   description=waypoint[3]))
+      
+      with open(filename, "w") as gpxfile:
+        gpxfile.write(gpx.to_xml())
+    return 
+  
   def build_nationwide_items(self):
     """ build the nationwide items for the USA"""
+    
+    # VHF Navaids
+    print("Building VHF Navaids")
+    vors = self.usa.get_vors()
+    
+    # build the GPX file
+    self.build_gpx_waypoints(self.outpath+"USA_Navaids.gpx", vors)
+    
     # build the KML base
     self.kml = kmlout.KMLOutput("VHF Navaids", self.outpath+"USA_Navaids.kml")
     
-    print("Building VHF Navaids")
-    vors = self.usa.get_vors()
+    
     for vor in vors:
       self.kml.add_point(self.kml.rootfolder, vor[0], vor[1], vor[3])
     
@@ -325,21 +359,22 @@ class CIFPReader:
     return
   
   def build_pp_airspace(self, shapes, airport, color):
-    # build the OUT file
-    outfile = open(self.outpath+"{}_Airspace.out".format(airport), "w")
-    
-    # add the header and color
-    outfile.write("{{{}_Airspace}}\n".format(airport))
-    outfile.write("$TYPE={}\n".format(color))
-    
-    # add each shape
-    for shape in shapes:
-      for pt in shape:
-        # output
-        outfile.write("{:.6f}+{:.6f}\n".format(*pt))
-      outfile.write("-1\n")
-    
-    outfile.close()
+    if len(shapes) > 0:
+      # build the OUT file
+      outfile = open(self.outpath+"{}_Airspace.out".format(airport), "w")
+      
+      # add the header and color
+      outfile.write("{{{}_Airspace}}\n".format(airport))
+      outfile.write("$TYPE={}\n".format(color))
+      
+      # add each shape
+      for shape in shapes:
+        for pt in shape:
+          # output
+          outfile.write("{:.6f}+{:.6f}\n".format(*pt))
+        outfile.write("-1\n")
+      
+      outfile.close()
         
   def debug(self):
     # debug test
@@ -740,6 +775,7 @@ class CIFPReader:
 def process_airport(cifp, airport, include_missed):
   print("Processing {} ========================".format(airport))
   cifp.build_airport(airport, include_missed)
+  cifp.process_terminal_waypoints(airport)
   return
 
 def process_center_boundaries(filename, outpath):
@@ -802,70 +838,63 @@ def process_center_boundaries(filename, outpath):
 
 if __name__ == '__main__':
   # when this file is run directly, run this code
+  cifp_path = r"C:\Data\CIFP"
+  cifp_version = "CIFP_200813"
+  eram_version = "2020-07-16"
+  eram_path = r"C:\Data\CIFP\ERAM"
+  
   
   # process the center boundaries
   # https://www.faa.gov/air_traffic/flight_info/aeronav/Aero_Data/Center_Surface_Boundaries/
-  ##process_center_boundaries(r"C:\Data\CIFP\ERAM_200618\Ground_Level_ARTCC_Boundary_Data_2020-06-18.csv", r"C:\Data\CIFP\ERAM_200618" )
+  process_center_boundaries(eram_path+"\\Ground_Level_ARTCC_Boundary_Data_{}.csv".format(eram_version), eram_path)
   
   # process the CIFP file
+  cifp = CIFPReader(cifp_path, cifp_version)
+  
+  # build the national items
+  cifp.build_nationwide_items()
+  
+  # build select procedures for every airport with a tower in our area, plus a few others
+  process_airport(cifp, "KDEN", False)
+  process_airport(cifp, "KBJC", False)
+  process_airport(cifp, "KEIK", False)
+  process_airport(cifp, "KLMO", False)
+  process_airport(cifp, "KAPA", False)
+  process_airport(cifp, "KFNL", False)
+  process_airport(cifp, "KGXY", False)
+  
+  # standard requests
+  process_airport(cifp, "KJFK", False)
+  process_airport(cifp, "KSFO", False)
+  process_airport(cifp, "KLAS", False)
+  process_airport(cifp, "KMEM", False)
+  process_airport(cifp, "KEWR", False)
+  process_airport(cifp, "KORD", False)
+  
+  # PlanePlotter Requested Airports
+  process_airport(cifp, "KATL", False)  # Requested by Greg Gilbert greggilbert195@gmail.com
+  
+  process_airport(cifp, "KJAX", False)  # Requested by Gary Moyer zonian149@gmail.com
+  
+  process_airport(cifp, "KALB", False)  # Requested by David Stark davidthomasstark@gmail.com
+  process_airport(cifp, "KBOS", False)  # Requested by David Stark davidthomasstark@gmail.com
+  process_airport(cifp, "KLGA", False)  # Requested by David Stark davidthomasstark@gmail.com
+  process_airport(cifp, "KSCH", False)  # Requested by David Stark davidthomasstark@gmail.com
+  
+  # process_airport(cifp, "", False)
+  # cifp.process_terminal_waypoints("")  # Requested by
+  
+  # Denver Area
   # lat_min = 35.5
   # lat_max = 44.5
   # lon_min = -110.0
   # lon_max = -98.0
-  cifp = CIFPReader(r"C:\Data\CIFP", "CIFP_200716") #, lat_min, lat_max, lon_min, lon_max)
+  #cifp = CIFPReader(cifp_path, cifp_version, lat_min, lat_max, lon_min, lon_max)
   
-  # build the national items
-  ##cifp.build_nationwide_items()
-  
-  # build all procedures
-  #for airport in cifp.usa.airports.keys():
-  #  process_airport(cifp, airport)
-  
-  # build select procedures for every airport with a tower in our area, plus a few others
-  process_airport(cifp, "KDEN", False)
-  cifp.process_terminal_waypoints("KDEN")
-   
-  process_airport(cifp, "KBJC", False)
-  cifp.process_terminal_waypoints("KBJC")
-  
-  ##process_airport(cifp, "KEIK", False)
-  ##process_airport(cifp, "KLMO", False)
-  ##process_airport(cifp, "KAPA", False)
-  ##process_airport(cifp, "KFNL", False)
-  ##process_airport(cifp, "KGXY", False)
-  ##process_airport(cifp, "KASE", False)
-  ##process_airport(cifp, "KEGE", False)
-  ##process_airport(cifp, "KSBS", False)
-  ##
-  ##process_airport(cifp, "KJFK", False)
-  ##cifp.process_terminal_waypoints("KJFK")
-  ##process_airport(cifp, "KSFO", False)
-  ##cifp.process_terminal_waypoints("KSFO")
-  ##process_airport(cifp, "KLAS", False)
-  ##cifp.process_terminal_waypoints("KLAS")
-  ##process_airport(cifp, "KMEM", False)
-  ##cifp.process_terminal_waypoints("KMEM")
-  ##process_airport(cifp, "KEWR", False)
-  ##cifp.process_terminal_waypoints("KEWR")
-  ##process_airport(cifp, "KORD", False)
-  ##cifp.process_terminal_waypoints("KORD")
-  ##
-  ### PlanePlotter Requested Airports
-  process_airport(cifp, "KATL", False)
-  cifp.process_terminal_waypoints("KATL") # Requested by Greg Gilbert greggilbert195@gmail.com
-  process_airport(cifp, "KJAX", False)
-  cifp.process_terminal_waypoints("KJAX") # Requested by Gary Moyer zonian149@gmail.com
-  process_airport(cifp, "KALB", False)
-  cifp.process_terminal_waypoints("KALB")  # Requested by David Stark 
-  process_airport(cifp, "KBOS", False)
-  cifp.process_terminal_waypoints("KBOS")  # Requested by David Stark 
-  process_airport(cifp, "KLGA", False)
-  cifp.process_terminal_waypoints("KLGA")  # Requested by David Stark 
-  process_airport(cifp, "KSCH", False)
-  cifp.process_terminal_waypoints("KSCH")  # Requested by David Stark 
-  
-  # process_airport(cifp, "", False)
-  # cifp.process_terminal_waypoints("")  # Requested by
+  # for David Stark davidthomasstark@gmail.com
+  cifp = CIFPReader(cifp_path, cifp_version, 39.0, 46.0, -81.0, -72.0, "Processed_DTS")
+  for airport in cifp.usa.airports.keys():
+    process_airport(cifp, airport, False)
   
   print("Done.")
   

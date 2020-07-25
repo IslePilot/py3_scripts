@@ -46,6 +46,8 @@ class Airport:
     self.waypoints = cp.CIFPPointSet()
     self.ils = cp.CIFPPointSet()
     
+    self.all_waypoints = {} # keys are all waypoints encountered at this airport, value is the section the waypoint is found in
+    
     self.controlled_airspace = {} # dictionary containing AirspaceShapes
     
     # Procedure Dictionaries (dictionaries of Procedures)
@@ -108,6 +110,12 @@ class Airport:
     return None
   
   def add_procedure(self, procedure_record):
+    # add any waypoints in this line to our list
+    if procedure_record.fix_identifier not in self.all_waypoints:
+      self.all_waypoints[procedure_record.fix_identifier] = procedure_record.fix_section
+    if procedure_record.recommended_nav not in self.all_waypoints:
+      self.all_waypoints[procedure_record.recommended_nav] = procedure_record.nav_section
+    
     if procedure_record.subsection_code == "D":
       # Standard Instrument Departures (SIDS)
       # if this procedure doesn't exist, create it (i.e. BAYLR6)
@@ -167,3 +175,39 @@ class Airport:
   def get_localizers(self):
     # get a list of localizers for this airport
     return self.ils.get_points()
+  
+  def get_all_waypoints(self):
+    # return a list of all waypoints this airport utilizes
+    wp_dict = {}
+    
+    # work through our list of waypoints
+    for wp, section in self.all_waypoints.items():
+      if wp not in wp_dict:
+        if section == "D ":
+          pf = self.D.get_point(wp)
+        elif section == "DB":
+          pf = self.DB.get_point(wp)
+        elif section == "EA":
+          pf = self.EA.get_point(wp)
+        elif section == "PC":
+          pf = self.waypoints.get_point(wp)
+        elif section == "PG":
+          pf = self.runways.get_point(wp)
+        elif section == "PN":
+          pf = self.ndbs.get_point(wp)
+        elif section == "PI":
+          pf = self.ils.get_point(wp)
+        elif section == "  ":
+          pf = None
+          continue
+        else:
+          print("Airport.get_all_waypoints: Error Section {} for waypoint {} not found".format(section, wp))
+          pf = None
+          continue
+        
+        if pf != None:
+          wp_dict[wp] = (wp, pf.latlon, pf.ident, pf.description, pf.altitude)
+    
+    return list(wp_dict.values())
+
+    

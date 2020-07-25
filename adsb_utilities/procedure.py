@@ -772,7 +772,11 @@ class Procedure:
           # get our last point
           prev = routes[key][-1]
           
-          dhdg = pr.magnetic_course - prev.heading
+          if prev.heading != None:
+            dhdg = pr.magnetic_course - prev.heading
+          else:
+            dhdg = 0.0
+            
           if abs(dhdg) < 10.0 or abs(dhdg) > 350.0:
               prev.heading = pr.magnetic_course
               continue
