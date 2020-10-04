@@ -87,7 +87,8 @@ if __name__ == '__main__':
   print("Italy completed. Lines:", italy_len)
 
   # get the colorado data
-  page = requests.get('https://opendata.arcgis.com/datasets/6811473e86fe4e2cb6af10d54c15ecee_0.csv')
+  #page = requests.get('https://opendata.arcgis.com/datasets/6811473e86fe4e2cb6af10d54c15ecee_0.csv')
+  page = requests.get('https://opendata.arcgis.com/datasets/bd4ee19bc7fc4288a20db8d5a7bd2be2_0.csv')
   txt_list = page.text.splitlines(False)
   first = True
   co_cases = []
@@ -100,7 +101,7 @@ if __name__ == '__main__':
       data = line.split(',')
       if len(data[3]) > 0:
         cases = int(data[3])
-        deaths = int(data[5])
+        deaths = int(data[6])
         if cases > 500:
           co_cases.append(cases)
           co_deaths.append(deaths)
