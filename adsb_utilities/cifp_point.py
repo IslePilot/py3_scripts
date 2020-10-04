@@ -196,6 +196,7 @@ class CIFPPoint:
   POINT_LDA = 15
   POINT_SDF_GS = 16
   POINT_SDF = 17
+  POINT_DME = 18
   
   def __init__(self, record):
     """read and parse a CIFPPoint record"""
@@ -275,18 +276,24 @@ class CIFPPoint:
         self.style = self.POINT_VORTAC
       else:
         print("Point.parse_vhf_navaid: Unexpected VOR type: {}".format(record))
-
-      # now parse the rest of the record
-      self.ident = record[13:17].rstrip()
-      self.continuation_count = record[21]
-      self.frequency = cf.parse_float(record[22:27], 100)
+      
       self.latitude = cf.parse_lat(record[32:41])
       self.longitude = cf.parse_lon(record[41:51])
-      self.declination = cf.parse_variation(record[74:79])
-      self.name = record[93:123].rstrip()
-      
-      # good point!
-      self.valid = True
+    
+    elif record[28] == "D": # this is just a DME
+      self.style = self.POINT_DME
+      self.latitude = cf.parse_lat(record[55:64])
+      self.longitude = cf.parse_lon(record[64:74])
+
+    # now parse the rest of the record
+    self.ident = record[13:17].rstrip()
+    self.continuation_count = record[21]
+    self.frequency = cf.parse_float(record[22:27], 100)
+    self.declination = cf.parse_variation(record[74:79])
+    self.name = record[93:123].rstrip()
+    
+    # good point!
+    self.valid = True
     
     return
   

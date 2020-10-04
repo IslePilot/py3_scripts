@@ -39,7 +39,7 @@ class Airport:
     self.elevation_ft = self.reference_point.elevation_ft
     self.latitude = self.reference_point.latitude
     self.longitude = self.reference_point.longitude
-            
+    
     # initialize holders
     self.runways = cp.CIFPPointSet()
     self.ndbs = cp.CIFPPointSet()
@@ -183,6 +183,8 @@ class Airport:
     # work through our list of waypoints
     for wp, section in self.all_waypoints.items():
       if wp not in wp_dict:
+        pf = None
+        pd = None
         if section == "D ":
           pf = self.D.get_point(wp)
         elif section == "DB":
@@ -197,16 +199,18 @@ class Airport:
           pf = self.ndbs.get_point(wp)
         elif section == "PI":
           pf = self.ils.get_point(wp)
+        elif section == "PA":
+          pd = {'ident':self.ident, 'latlon':(self.latitude, self.longitude), 'description':"Airport", 'altitude':self.elevation_ft}
         elif section == "  ":
-          pf = None
           continue
         else:
           print("Airport.get_all_waypoints: Error Section {} for waypoint {} not found".format(section, wp))
-          pf = None
           continue
         
         if pf != None:
           wp_dict[wp] = (wp, pf.latlon, pf.ident, pf.description, pf.altitude)
+        elif pd != None:
+          wp_dict[wp] = (wp, pd['latlon'], pd['ident'], pd['description'], pd['altitude'])
     
     return list(wp_dict.values())
 

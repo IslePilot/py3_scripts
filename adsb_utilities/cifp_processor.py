@@ -837,10 +837,26 @@ def process_center_boundaries(filename, outpath):
 
 
 if __name__ == '__main__':
+  # Steps
+  # 1. Modify paths and versions in the block below
+  # 2. Run cifp_processor
+  # 3. Sort Processed folder by name, zip airports and move zip file to ToShare (19 files)
+  # 4. Copy ERAM ARTCC files to ToShare (2 files)
+  # 5. Copy USA* files from Processed folder to ToShare (7 files)
+  # 6. Update txt filename to represent appropriate data
+  # 7. Update PNG files if there are significant changes
+  # 8. Run 000_scp.bat to upload data to website
+  # 9. Edit index.html on website to indicate versions
+  # 10. Notify PlanePlotter users if desired
+  # 11. Zip Processed_DTS and send to David Stark if desired
+  # 12. Update PlanePlotter Charts folder with new data
+  
+  
+  
   # when this file is run directly, run this code
   cifp_path = r"C:\Data\CIFP"
-  cifp_version = "CIFP_200813"
-  eram_version = "2020-07-16"
+  cifp_version = "CIFP_201008"
+  eram_version = "2020-10-08"
   eram_path = r"C:\Data\CIFP\ERAM"
   
   
