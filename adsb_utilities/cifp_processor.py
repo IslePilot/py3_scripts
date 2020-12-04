@@ -838,25 +838,26 @@ def process_center_boundaries(filename, outpath):
 
 if __name__ == '__main__':
   # Steps
+  # Update data sets:
+  # https://www.faa.gov/air_traffic/flight_info/aeronav/digital_products/cifp/download/
+  # https://www.faa.gov/air_traffic/flight_info/aeronav/Aero_Data/Center_Surface_Boundaries/
+  #
   # 1. Modify paths and versions in the block below
   # 2. Run cifp_processor
-  # 3. Sort Processed folder by name, zip airports and move zip file to ToShare (19 files)
-  # 4. Copy ERAM ARTCC files to ToShare (2 files)
-  # 5. Copy USA* files from Processed folder to ToShare (7 files)
-  # 6. Update txt filename to represent appropriate data
-  # 7. Update PNG files if there are significant changes
-  # 8. Run 000_scp.bat to upload data to website
-  # 9. Edit index.html on website to indicate versions
-  # 10. Notify PlanePlotter users if desired
-  # 11. Zip Processed_DTS and send to David Stark if desired
-  # 12. Update PlanePlotter Charts folder with new data
+  # 3. Modify zipper.py path to data and run zipper.py
+  # 4. Update txt filename to represent appropriate data
+  # 5. Update PNG files if there are significant changes
+  # 6. Run 000_scp.bat to upload data to website
+  # 7. Edit index.html on website to indicate versions
+  # 8. Notify PlanePlotter users if desired
+  # 9. Zip Processed_DTS and send to David Stark if desired
   
   
   
   # when this file is run directly, run this code
   cifp_path = r"C:\Data\CIFP"
-  cifp_version = "CIFP_201008"
-  eram_version = "2020-10-08"
+  cifp_version = "CIFP_201203"
+  eram_version = "2020-12-03"
   eram_path = r"C:\Data\CIFP\ERAM"
   
   
@@ -896,6 +897,13 @@ if __name__ == '__main__':
   process_airport(cifp, "KBOS", False)  # Requested by David Stark davidthomasstark@gmail.com
   process_airport(cifp, "KLGA", False)  # Requested by David Stark davidthomasstark@gmail.com
   process_airport(cifp, "KSCH", False)  # Requested by David Stark davidthomasstark@gmail.com
+
+  process_airport(cifp, "KDFW", False)  # Requested by Clay Carrington clay.carrington@hotmail.com
+  process_airport(cifp, "KDAL", False)  # Requested by Clay Carrington clay.carrington@hotmail.com
+  process_airport(cifp, "KADS", False)  # Requested by Clay Carrington clay.carrington@hotmail.com
+  process_airport(cifp, "KTKI", False)  # Requested by Clay Carrington clay.carrington@hotmail.com
+  process_airport(cifp, "KGVT", False)  # Requested by Clay Carrington clay.carrington@hotmail.com
+  process_airport(cifp, "KGYI", False)  # Requested by Clay Carrington clay.carrington@hotmail.com
   
   # process_airport(cifp, "", False)
   # cifp.process_terminal_waypoints("")  # Requested by
@@ -911,6 +919,7 @@ if __name__ == '__main__':
   cifp = CIFPReader(cifp_path, cifp_version, 39.0, 46.0, -81.0, -72.0, "Processed_DTS")
   for airport in cifp.usa.airports.keys():
     process_airport(cifp, airport, False)
+  
   
   print("Done.")
   

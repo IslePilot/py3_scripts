@@ -91,12 +91,12 @@ class WxDataCollector():
     # build our shared memory datasets
     self.metar_array = Array('d', len(self.metar_list))
     self.fencestation_array = Array('d', len(self.fence_list))
-    self.roofstation_array = Array('d', len(self.roof_list))
+    #METAR self.roofstation_array = Array('d', len(self.roof_list))
     
     # instance the data collectors
     self.gather_metar_data(self.config['METAR'])
     self.gather_fencestation_data(self.config['FENCE_STATION'])
-    self.gather_roofstation_data(self.config['ROOF_STATION'])
+    #METAR self.gather_roofstation_data(self.config['ROOF_STATION'])
     
     # build the data format
     self.data = OrderedDict() # native units
@@ -237,7 +237,7 @@ class WxDataCollector():
       self._get_fence_station()
       
       # get the lastest roof station data
-      self._get_roof_station()
+      #METAR self._get_roof_station()
             
       # publish the data to our data file
       self.write_data_files()
@@ -319,8 +319,11 @@ class WxDataCollector():
     temp_f = wx.temp_c_to_f(metar_data.temp_c)
     #===========================================================================
     # dewpoint_f = wx.temp_c_to_f(metar_data.dewpoint_c)
-    # wind_speed_mph = wx.speed_kt_to_mph(metar_data.wind_speed_kt)
-    # gust_speed_mph = wx.speed_kt_to_mph(metar_data.wind_gust_kt)
+    wind_speed_mph = wx.speed_kt_to_mph(metar_data.wind_speed_kt)
+    gust_speed_mph = wx.speed_kt_to_mph(metar_data.wind_gust_kt)
+    
+    # save this for wind chill computations
+    self.wind_speed_mph = wind_speed_mph
     #===========================================================================
     
     # values we always want to get from the METAR data
@@ -336,9 +339,10 @@ class WxDataCollector():
       self.data['channel1_temp_rate_degF_per_hour'][0] = 0.0
     
     # these values will be replaced with our sensors when available
-    # self.data['wind_speed_mph'][0] = wind_speed_mph
-    # self.data['wind_gust_mph'][0] = gust_speed_mph
-    # self.data['wind_direction_deg'][0] = metar_data.wind_dir_deg
+    print("METAR wind {} @ {:0.2f} Gusting {:0.2f}".format(metar_data.wind_dir_deg, wind_speed_mph, gust_speed_mph))
+    self.data['wind_speed_mph'][0] = wind_speed_mph
+    self.data['wind_gust_mph'][0] = gust_speed_mph
+    self.data['wind_direction_deg'][0] = metar_data.wind_dir_deg
     
     # self.data['outdoor_heat_index_degF'][0] = wx.compute_heat_index(temp_f, metar_data.rh_pct)
     # self.data['dew_point_degF'][0] = dewpoint_f
@@ -346,7 +350,7 @@ class WxDataCollector():
     # self.data['outside_temp_degF'][0] = temp_f
     # self.data['outside_humidity_pct'][0] = metar_data.rh_pct
     
-    # self.data['wind_chill_degF'][0] = wx.compute_wind_chill(temp_f, wind_speed_mph)
+    self.data['wind_chill_degF'][0] = wx.compute_wind_chill(temp_f, wind_speed_mph)
     
     # for now, compute the baro rate from the METAR data...it will be hard from our data because
     # the update rate is high
@@ -499,7 +503,7 @@ class WxDataCollector():
     self.data['channel2_temp_degF'][0] = roof_data.cpu_temp_f
     
     # save this for wind chill computations
-    self.wind_speed_mph = roof_data.wind_speed_mph
+    #METAR self.wind_speed_mph = roof_data.wind_speed_mph
     
     datatime = datetime.datetime.fromtimestamp(roof_data.timestamp, tz=pytz.UTC)
     print("==========================================================================")

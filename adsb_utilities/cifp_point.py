@@ -197,6 +197,7 @@ class CIFPPoint:
   POINT_SDF_GS = 16
   POINT_SDF = 17
   POINT_DME = 18
+  POINT_TACAN = 19
   
   def __init__(self, record):
     """read and parse a CIFPPoint record"""
@@ -284,6 +285,11 @@ class CIFPPoint:
       self.style = self.POINT_DME
       self.latitude = cf.parse_lat(record[55:64])
       self.longitude = cf.parse_lon(record[64:74])
+    elif record[28] == "T": # this is just a TACAN
+      self.style = self.POINT_TACAN
+      self.latitude = cf.parse_lat(record[55:64])
+      self.longitude = cf.parse_lon(record[64:74])
+    
 
     # now parse the rest of the record
     self.ident = record[13:17].rstrip()
