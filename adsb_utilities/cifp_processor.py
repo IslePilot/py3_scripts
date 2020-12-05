@@ -905,6 +905,8 @@ if __name__ == '__main__':
   process_airport(cifp, "KGVT", False)  # Requested by Clay Carrington clay.carrington@hotmail.com
   process_airport(cifp, "KGYI", False)  # Requested by Clay Carrington clay.carrington@hotmail.com
   
+  process_airport(cifp, "KMSN", False)  # Requested by Dan Egan egandp@ameritech.net
+  
   # process_airport(cifp, "", False)
   # cifp.process_terminal_waypoints("")  # Requested by
   
