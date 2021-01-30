@@ -605,17 +605,7 @@ class CIFPReader:
             print("CIFPReader.process_file: Unhandled UC Continuation Record: {}".format(record.rstrip()))
         
         elif self.code == "UR":  # Restricted Airspace
-          data = airspace.AirspaceRecord(record)
-          if self.is_primary(record):
-            # if we have a cifp_point we want, save it
-            if data != None and self.in_roi(data.latitude, data.longitude):
-              self.uc_cr_armed = True
-              self.usa.add_airspace(data)
-            else:
-              self.uc_cr_armed = False
-          else:
-            if self.uc_cr_armed:
-              self.usa.add_airspace(data)
+          self.usa.add_airspace(airspace.AirspaceRecord(record))
         else:
           print("CIFPReader.process_file: Unprocessed Record: {} {}".format(self.code, record))
       
@@ -845,7 +835,7 @@ if __name__ == '__main__':
   # 1. Modify paths and versions in the block below
   # 2. Run cifp_processor
   # 3. Modify zipper.py path to data and run zipper.py
-  # 4. Update txt filename to represent appropriate data
+  # 4. Update txt filename in ToShare to represent appropriate data
   # 5. Update PNG files if there are significant changes
   # 6. Run 000_scp.bat to upload data to website
   # 7. Edit index.html on website to indicate versions
@@ -856,8 +846,8 @@ if __name__ == '__main__':
   
   # when this file is run directly, run this code
   cifp_path = r"C:\Data\CIFP"
-  cifp_version = "CIFP_201203"
-  eram_version = "2020-12-03"
+  cifp_version = "CIFP_210128"
+  eram_version = "2021-01-28"
   eram_path = r"C:\Data\CIFP\ERAM"
   
   
