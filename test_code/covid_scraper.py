@@ -25,74 +25,93 @@ Revision History:
 """
 
 import requests
-import bisect
+from datetime import datetime
 
-def get_cases(text_list):
-  key = 'Highcharts.chart(\'coronavirus-cases-linear\', {'
-  return get_data(text_list, key)
-def get_deaths(text_list):
-  key = 'Highcharts.chart(\'coronavirus-deaths-linear\', {'
-  return get_data(text_list, key)
-def get_data(text_list, key):
-  flag = 'data:'
-  armed = False
-  for line in text_list:
-    if armed:
-      if line.find(flag) >= 0:
-        beg = line.find('[')
-        end = line.find(']')
-        return tuple(map(int, line[beg+1:end].split(',')))
-    elif line.find(key) >= 0:
-      armed = True
-  return None
+
+
+
+class CountryData:
+  def __init__(self, country):
+    link = 'https://www.worldometers.info/coronavirus/country/{}/'.format(country)
+    
+    # get the webpage data
+    page = requests.get(link)
+    
+    # split the page into lines
+    self.text_list = page.text.splitlines(False)
+    
+    # get the case data
+    dates, data = self.get_data("Highcharts.chart(\'coronavirus-cases-linear\', {")
+    self.case_data = dict(zip(dates, data))
+    
+    # get the death data
+    dates, data = self.get_data("Highcharts.chart('coronavirus-deaths-linear', {")
+    self.death_data = dict(zip(dates, data))
+    
+    # build the data list
+    self.build_data_list()
+    
+    return
+  
+  def build_data_list(self):
+    self.data = []
+    for date in self.case_data:
+      self.data.append('{},{},{}'.format(date, self.case_data[date], self.death_data[date]))
+    return
+  
+  def len(self):
+    return(len(self.data))
+    
+  def get_data(self, key):
+    txt = self.parse_data(key, 'categories:')
+    txts = txt[1:-1].split('","')
+    dates = self.convert_dates(txts)
+    
+    txt = self.parse_data(key, 'data:')
+    data = tuple(map(int, txt.split(',')))
+    
+    return dates, data
+  
+  def parse_data(self, key, flag):
+    armed = False
+    for line in self.text_list:
+      if armed:
+        if line.find(flag) >= 0:
+          beg = line.find('[')
+          end = line.find(']')
+          return line[beg+1:end]
+      elif line.find(key) >= 0:
+        armed = True
+    return None
+  
+  def convert_dates(self, date_list):
+    dates = []
+    for txt in date_list:
+      dates.append(datetime.strptime(txt, '%b %d, %Y').strftime("%m/%d/%Y"))
+    return dates
        
         
 
 if __name__ == '__main__':
   # when this file is run directly, run this code
-  page = requests.get('https://www.worldometers.info/coronavirus/country/us/')
-  txt_list = page.text.splitlines(False)
-  us_cases = get_cases(txt_list)
-  index = bisect.bisect_left(us_cases, 500)
-  us_cases = us_cases[index:]
-  us_deaths = get_deaths(txt_list)[index:]
-  us_len = len(us_cases)
-  print("US completed.  Lines:", us_len)
+  us = CountryData('us')
+  print("US completed. Lines: {}".format(us.len()))
   
-  page = requests.get('https://www.worldometers.info/coronavirus/country/china/')
-  txt_list = page.text.splitlines(False)
-  china_cases = get_cases(txt_list)
-  index = bisect.bisect_left(china_cases, 500)
-  china_cases = china_cases[index:]
-  china_deaths = get_deaths(txt_list)[index:]
-  china_len = len(china_cases)
-  print("China completed. Lines:", china_len)
-
-  page = requests.get('https://www.worldometers.info/coronavirus/country/south-korea/')
-  txt_list = page.text.splitlines(False)
-  rok_cases = get_cases(txt_list)
-  index = bisect.bisect_left(rok_cases, 500)
-  rok_cases = rok_cases[index:]
-  rok_deaths = get_deaths(txt_list)[index:]
-  rok_len = len(rok_cases)
-  print("ROK completed. Lines:", rok_len)
+  china = CountryData('china')
+  print("China completed. Lines: {}".format(china.len()))
   
-  page = requests.get('https://www.worldometers.info/coronavirus/country/italy/')
-  txt_list = page.text.splitlines(False)
-  italy_cases = get_cases(txt_list)
-  index = bisect.bisect_left(italy_cases, 500)
-  italy_cases = italy_cases[index:]
-  italy_deaths = get_deaths(txt_list)[index:]
-  italy_len = len(italy_cases)
-  print("Italy completed. Lines:", italy_len)
+  rok = CountryData('south-korea')
+  print("ROK completed. Lines: {}".format(rok.len()))
+  
+  italy = CountryData('italy')
+  print("Italy completed. Lines: {}".format(italy.len()))
 
   # get the colorado data
-  #page = requests.get('https://opendata.arcgis.com/datasets/6811473e86fe4e2cb6af10d54c15ecee_0.csv')
-  page = requests.get('https://opendata.arcgis.com/datasets/bd4ee19bc7fc4288a20db8d5a7bd2be2_0.csv')
+  #https://data-cdphe.opendata.arcgis.com/datasets/cdphe-covid19-daily-state-statistics-1
+  page = requests.get('https://opendata.arcgis.com/datasets/89d3380a96374a6ab04c3256d766132b_0.csv')
   txt_list = page.text.splitlines(False)
   first = True
-  co_cases = []
-  co_deaths = []
+  co_data = []
   for line in txt_list:
     if first:
       # skip the header
@@ -100,17 +119,16 @@ if __name__ == '__main__':
     else:
       data = line.split(',')
       if len(data[3]) > 0:
+        date = data[2]
         cases = int(data[3])
         deaths = int(data[6])
-        if cases > 500:
-          co_cases.append(cases)
-          co_deaths.append(deaths)
-  co_len = len(co_cases)
+        co_data.append("{},{},{}".format(date, cases, deaths))
+  co_len = len(co_data)
   print("Colorado completed. Lines:", co_len)
 
   
   csv = open('c:\\Temp\\world_covid.csv', 'w')
-  csv.write("china_cases,china_deaths,rok_cases,rok_deaths,italy_cases,italy_deaths,us_cases,us_deaths,co_cases,co_deaths\n")
+  csv.write("china_dates,china_cases,china_deaths,rok_dates,rok_cases,rok_deaths,italy_dates,italy_cases,italy_deaths,us_dates,us_cases,us_deaths,co_dates,co_cases,co_deaths\n")
   ch_done = False 
   rok_done = False 
   it_done = False 
@@ -119,34 +137,34 @@ if __name__ == '__main__':
   
   i=0
   while not ch_done or not rok_done or not it_done or not us_done:
-    if i < china_len:
-      csv.write("{},{},".format(china_cases[i], china_deaths[i]))
+    if i < china.len():
+      csv.write("{},".format(china.data[i]))
     else:
-      csv.write(",,")
+      csv.write(",,,")
       ch_done = True
   
-    if i < rok_len:
-      csv.write("{},{},".format(rok_cases[i], rok_deaths[i]))
+    if i < rok.len():
+      csv.write("{},".format(rok.data[i]))
     else:
-      csv.write(",,")
+      csv.write(",,,")
       rok_done = True
     
-    if i < italy_len:
-      csv.write("{},{},".format(italy_cases[i], italy_deaths[i]))
+    if i < italy.len():
+      csv.write("{},".format(italy.data[i]))
     else:
-      csv.write(",,")
+      csv.write(",,,")
       it_done = True
     
-    if i < us_len:
-      csv.write("{},{},".format(us_cases[i], us_deaths[i]))
+    if i < us.len():
+      csv.write("{},".format(us.data[i]))
     else:
-      csv.write(",,")
+      csv.write(",,,")
       us_done = True
     
     if i < co_len:
-      csv.write("{},{},".format(co_cases[i], co_deaths[i]))
+      csv.write("{},".format(co_data[i]))
     else:
-      csv.write(",,")
+      csv.write(",,,")
       co_done = True
     
     csv.write("\n")
@@ -154,14 +172,7 @@ if __name__ == '__main__':
   
   csv.close()
     
-    
-      
-      
-    
-    
-  
-    
-  
+
   print("Done")
   
   
