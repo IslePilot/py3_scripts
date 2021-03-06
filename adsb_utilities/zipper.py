@@ -51,7 +51,7 @@ if __name__ == '__main__':
   print(VERSION)
   
   # Modify this ################# vvvvvv #############
-  processed = r'C:\Data\CIFP\CIFP_210128\Processed'
+  processed = r'C:\Data\CIFP\CIFP_210325\Processed'
   eram = r'C:\Data\CIFP\ERAM'
   output = r'C:\Data\CIFP\ToShare'
   charts = r'C:\COAA\PlanePlotter\Chart files'
@@ -77,11 +77,13 @@ if __name__ == '__main__':
   listing = filetools.get_listing(processed, "^USA_")
   for f in listing:
     filetools.cp(f, output)
+    filetools.cp(f, charts)
   
   # copy ERAM files
   listing = filetools.get_listing(eram, "^USA_")
   for f in listing:
     filetools.cp(f, output)
+    filetools.cp(f, charts)
     
   # update chart files
   listing = filetools.get_listing(charts, '')

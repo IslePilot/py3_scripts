@@ -846,8 +846,8 @@ if __name__ == '__main__':
   
   # when this file is run directly, run this code
   cifp_path = r"C:\Data\CIFP"
-  cifp_version = "CIFP_210128"
-  eram_version = "2021-01-28"
+  cifp_version = "CIFP_210325"
+  eram_version = "2021-02-25"
   eram_path = r"C:\Data\CIFP\ERAM"
   
   
@@ -894,8 +894,21 @@ if __name__ == '__main__':
   process_airport(cifp, "KTKI", False)  # Requested by Clay Carrington clay.carrington@hotmail.com
   process_airport(cifp, "KGVT", False)  # Requested by Clay Carrington clay.carrington@hotmail.com
   process_airport(cifp, "KGYI", False)  # Requested by Clay Carrington clay.carrington@hotmail.com
+  process_airport(cifp, "KNFW", False)  # Requested by Clay Carrington clay.carrington@hotmail.com
+  process_airport(cifp, "KAFW", False)  # Requested by Clay Carrington clay.carrington@hotmail.com
+  process_airport(cifp, "KSPS", False)  # Requested by Clay Carrington clay.carrington@hotmail.com
+  process_airport(cifp, "KLTS", False)  # Requested by Clay Carrington clay.carrington@hotmail.com
+  process_airport(cifp, "KEND", False)  # Requested by Clay Carrington clay.carrington@hotmail.com
+  process_airport(cifp, "KTIK", False)  # Requested by Clay Carrington clay.carrington@hotmail.com
+  process_airport(cifp, "KBAD", False)  # Requested by Clay Carrington clay.carrington@hotmail.com
+  process_airport(cifp, "KDYS", False)  # Requested by Clay Carrington clay.carrington@hotmail.com
   
   process_airport(cifp, "KMSN", False)  # Requested by Dan Egan egandp@ameritech.net
+  
+  process_airport(cifp, "KMDW", False)  # Requested by Don Froula
+  process_airport(cifp, "KDPA", False)  # Requested by Don Froula
+  process_airport(cifp, "KARR", False)  # Requested by Don Froula
+  process_airport(cifp, "KPWK", False)  # Requested by Don Froula
   
   # process_airport(cifp, "", False)
   # cifp.process_terminal_waypoints("")  # Requested by
