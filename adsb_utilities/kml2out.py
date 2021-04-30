@@ -25,9 +25,6 @@ Revision History:
 2020-04-20, ksb, added method to simplify multiple file processing
 """
 
-import sys
-sys.path.append("..")
-import __common.filetools as filetools
 
 def build_out(path, filename, color):
   # open the output file
@@ -78,24 +75,26 @@ def build_out(path, filename, color):
   return
   
 # define a version for this file
-VERSION = "1.0.20200420a"
+VERSION = "1.0.20210306a"
 
 if __name__ == '__main__':
   # when this file is run directly, run this code
   print(VERSION)
   
-  path = "C:\\Data\\DEN"
+  
   
   # colors:
   # 0 - Red
   # 1 - Orange
   # 2 - Yellow
   # 3 - Green
-  # 4 - Aqua
+  # 4 - Cyan
   # 5 - Blue
   # 6 - Magenta
   # 7 - White
   # 8 - Gray
+  
+  path = "C:\\Data\\DEN"
   build_out(path, "CO_Airports", 2)
   build_out(path, "CO_Airspace", 6)
   build_out(path, "CO_Interstates", 4)
@@ -110,6 +109,9 @@ if __name__ == '__main__':
   build_out(path, "KBJC_SIDs", 8)
   build_out(path, "KBJC_STARS", 5)
   
+  path = "C:\\Data\\Misc"
+  build_out(path, "FoxValley", 0)
+    
   print("Done")
 
 

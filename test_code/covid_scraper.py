@@ -108,7 +108,8 @@ if __name__ == '__main__':
 
   # get the colorado data
   #https://data-cdphe.opendata.arcgis.com/datasets/cdphe-covid19-daily-state-statistics-1
-  page = requests.get('https://opendata.arcgis.com/datasets/89d3380a96374a6ab04c3256d766132b_0.csv')
+  #https://data-cdphe.opendata.arcgis.com/datasets/cdphe-colorado-covid19-daily-state-statistics
+  page = requests.get('https://opendata.arcgis.com/datasets/80193066bcb84a39893fbed995fc8ed0_0.csv')
   txt_list = page.text.splitlines(False)
   first = True
   co_data = []

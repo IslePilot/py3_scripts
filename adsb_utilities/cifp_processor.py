@@ -103,19 +103,44 @@ class CIFPReader:
     
     return      
   
-  def build_gpx_waypoints(self, filename, waypoints):
+  def build_gpx_waypoints(self, filename, waypoints, lat_min=-90.0, lat_max=90.0, lon_min=-180.0, lon_max=180.0):
     if len(waypoints) > 0:
       # build the GPX file
       gpx = gpxpy.gpx.GPX()
       
       for waypoint in waypoints:
-        gpx.waypoints.append(gpxpy.gpx.GPXWaypoint(latitude=waypoint[1][0],
-                                                   longitude=waypoint[1][1], 
-                                                   name=waypoint[0], 
-                                                   description=waypoint[3]))
+        lat = waypoint[1][0]
+        lon = waypoint[1][1]
+        if lat != None and lon != None:
+          if lat_min <= lat and lat <= lat_max and lon_min <= lon and lon <= lon_max:
+            gpx.waypoints.append(gpxpy.gpx.GPXWaypoint(latitude=lat,
+                                                       longitude=lon, 
+                                                       name=waypoint[0], 
+                                                       description=waypoint[3]))
       
       with open(filename, "w") as gpxfile:
         gpxfile.write(gpx.to_xml())
+    return 
+  
+  def build_enroute_waypoints(self, lat_min=-90.0, lat_max=90.0, lon_min=-180.0, lon_max=180.0, outbase="USA_Waypoints"):
+    # Waypoints
+    print("Building Enroute Waypoints")
+    waypoints = self.usa.get_waypoints()
+    
+    # build the GPX file
+    self.build_gpx_waypoints(self.outpath+"{}.gpx".format(outbase), waypoints, lat_min=lat_min, lat_max=lat_max, lon_min=lon_min, lon_max=lon_max)
+    
+    # build the KML base
+    self.kml = kmlout.KMLOutput(outbase, self.outpath+"{}.kml".format(outbase))
+        
+    for wp in waypoints:
+      lat = wp[1][0]
+      lon = wp[1][1]
+      if lat_min <= lat and lat <= lat_max and lon_min <= lon and lon <= lon_max:
+        self.kml.add_point(self.kml.rootfolder, wp[0], wp[1], wp[3])
+    
+    self.kml.savefile()
+    
     return 
   
   def build_nationwide_items(self):
@@ -131,11 +156,11 @@ class CIFPReader:
     # build the KML base
     self.kml = kmlout.KMLOutput("VHF Navaids", self.outpath+"USA_Navaids.kml")
     
-    
     for vor in vors:
       self.kml.add_point(self.kml.rootfolder, vor[0], vor[1], vor[3])
     
     self.kml.savefile()
+    
     
     # build the KML structure
     self.kml = kmlout.KMLOutput("Airspace", self.outpath+"USA_Airspace.kml")
@@ -862,6 +887,7 @@ if __name__ == '__main__':
   cifp.build_nationwide_items()
   
   # build select procedures for every airport with a tower in our area, plus a few others
+  cifp.build_enroute_waypoints(lat_min=37.0, lat_max=41.0, lon_min=-109.0, lon_max=-102.0, outbase="CO_Enroute_Waypoints")
   process_airport(cifp, "KDEN", False)
   process_airport(cifp, "KBJC", False)
   process_airport(cifp, "KEIK", False)
@@ -909,6 +935,10 @@ if __name__ == '__main__':
   process_airport(cifp, "KDPA", False)  # Requested by Don Froula
   process_airport(cifp, "KARR", False)  # Requested by Don Froula
   process_airport(cifp, "KPWK", False)  # Requested by Don Froula
+  
+  process_airport(cifp, "KLNK", False)  # Requested by Ron Kokarik
+  process_airport(cifp, "KOFF", False)  # Requested by Ron Kokarik
+  process_airport(cifp, "KOMA", False)  # Requested by Ron Kokarik
   
   # process_airport(cifp, "", False)
   # cifp.process_terminal_waypoints("")  # Requested by
