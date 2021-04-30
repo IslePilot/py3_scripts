@@ -857,6 +857,8 @@ if __name__ == '__main__':
   # https://www.faa.gov/air_traffic/flight_info/aeronav/digital_products/cifp/download/
   # https://www.faa.gov/air_traffic/flight_info/aeronav/Aero_Data/Center_Surface_Boundaries/
   #
+  # Check KFSO Runway 19...YJN may need to be added to SCAND
+  #
   # 1. Modify paths and versions in the block below
   # 2. Run cifp_processor
   # 3. Modify zipper.py path to data and run zipper.py
@@ -871,8 +873,8 @@ if __name__ == '__main__':
   
   # when this file is run directly, run this code
   cifp_path = r"C:\Data\CIFP"
-  cifp_version = "CIFP_210325"
-  eram_version = "2021-02-25"
+  cifp_version = "CIFP_210520"
+  eram_version = "2021-04-22"
   eram_path = r"C:\Data\CIFP\ERAM"
   
   
