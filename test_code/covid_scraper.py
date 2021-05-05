@@ -100,8 +100,8 @@ if __name__ == '__main__':
   china = CountryData('china')
   print("China completed. Lines: {}".format(china.len()))
   
-  rok = CountryData('south-korea')
-  print("ROK completed. Lines: {}".format(rok.len()))
+  india = CountryData('india')
+  print("India completed. Lines: {}".format(india.len()))
   
   italy = CountryData('italy')
   print("Italy completed. Lines: {}".format(italy.len()))
@@ -129,26 +129,26 @@ if __name__ == '__main__':
 
   
   csv = open('c:\\Temp\\world_covid.csv', 'w')
-  csv.write("china_dates,china_cases,china_deaths,rok_dates,rok_cases,rok_deaths,italy_dates,italy_cases,italy_deaths,us_dates,us_cases,us_deaths,co_dates,co_cases,co_deaths\n")
+  csv.write("china_dates,china_cases,china_deaths,india_dates,india_cases,india_deaths,italy_dates,italy_cases,italy_deaths,us_dates,us_cases,us_deaths,co_dates,co_cases,co_deaths\n")
   ch_done = False 
-  rok_done = False 
+  india_done = False 
   it_done = False 
   us_done = False
   co_done = False
   
   i=0
-  while not ch_done or not rok_done or not it_done or not us_done:
+  while not ch_done or not india_done or not it_done or not us_done:
     if i < china.len():
       csv.write("{},".format(china.data[i]))
     else:
       csv.write(",,,")
       ch_done = True
   
-    if i < rok.len():
-      csv.write("{},".format(rok.data[i]))
+    if i < india.len():
+      csv.write("{},".format(india.data[i]))
     else:
       csv.write(",,,")
-      rok_done = True
+      india_done = True
     
     if i < italy.len():
       csv.write("{},".format(italy.data[i]))

@@ -98,19 +98,7 @@ if __name__ == '__main__':
   build_out(path, "CO_Airports", 2)
   build_out(path, "CO_Airspace", 6)
   build_out(path, "CO_Interstates", 4)
-  build_out(path, "KDEN_Approaches", 1)
-  build_out(path, "KDEN_SIDs", 8)
-  build_out(path, "KDEN_STARS", 5)
   build_out(path, "Special", 2)
-  build_out(path, "Denver_Approaches", 0)
-  
-  path = "C:\\Data\\BJC"
-  build_out(path, "KBJC_Approaches", 1)
-  build_out(path, "KBJC_SIDs", 8)
-  build_out(path, "KBJC_STARS", 5)
-  
-  path = "C:\\Data\\Misc"
-  build_out(path, "FoxValley", 0)
     
   print("Done")
 
