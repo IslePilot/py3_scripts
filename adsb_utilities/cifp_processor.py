@@ -942,6 +942,8 @@ if __name__ == '__main__':
   process_airport(cifp, "KOFF", False)  # Requested by Ron Kokarik
   process_airport(cifp, "KOMA", False)  # Requested by Ron Kokarik
   
+  process_airport(cifp, "KIND", False)  # Requested by Jason Webb jason.prime65334@gmail.com
+  
   # process_airport(cifp, "", False)
   # cifp.process_terminal_waypoints("")  # Requested by
   
