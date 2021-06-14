@@ -31,6 +31,8 @@ import utm
 import math
 import simplekml
 
+import geopy.distance
+
 def circle(origin, radius_nm):
   """build a list of lat/lon coordinates defining points along a circle
   
@@ -635,9 +637,8 @@ def get_distance(pt1, pt2):
   return math.sqrt(deast**2 + dnorth**2)
 
 def get_dist_ll(pt1, pt2):
-  pt1_utm = utm.from_latlon(*pt1)
-  pt2_utm = utm.from_latlon(*pt2, pt1_utm[2], pt1_utm[3])
-  return get_distance(pt1_utm[:2], pt2_utm[:2])
+  return geopy.distance.distance(pt1, pt2).m
+
 
 def dms2deg(lathem, latdeg, latmin, latsec, lonhem, londeg, lonmin, lonsec):
   """convert latitude and longitude to decimal degrees with the appropriate sign (+N -S, +E, -W)

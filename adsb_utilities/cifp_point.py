@@ -25,6 +25,7 @@ Revision History:
 """
 
 import sys
+from sympy.physics.quantum.tests.test_qapply import po
 sys.path.append("..")
 
 import cifp_functions as cf
@@ -60,8 +61,13 @@ class CIFPPointSet:
   
   def get_point(self, ident):
     if ident not in self.points:
-      # point is probably outside the ROI
-      return None
+      # do we have a whitespace issue?
+      if ident.rstrip() in self.points:
+        # yup...use the stripped version
+        ident = ident.rstrip()
+      else:
+        # point is probably outside the ROI
+        return None
     
     position = (self.points[ident].latitude, self.points[ident].longitude)
     

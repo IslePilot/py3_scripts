@@ -137,6 +137,13 @@ class NationalAirspace:
     
     return []
   
+  def get_airways(self):
+    airways = {}
+    for route_id in self.enroute_airways.keys():
+      airways[route_id] = self.get_airway(route_id)
+  
+    return airways
+      
   def is_airway(self, route_id):
     if route_id in self.enroute_airways:
       return True

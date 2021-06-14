@@ -303,11 +303,21 @@ class Procedure:
     for key, prs in procedure_records.items():
       routes[key] = []
       end_of_procedure = False  # only used when missed approach is NOT requested
+      vi_intercept_armed = False # only used when we are on an intercept to something from a VI
+      vi_intercept_armed_count = 0
+      
       for pr in prs:
         # should we stop processing?
         if end_of_procedure:
           break
         
+        # don't let an armed intercept exist past one cycle
+        if vi_intercept_armed:
+          vi_intercept_armed_count+=1
+        if vi_intercept_armed_count > 1:
+          vi_intercept_armed_count = 0
+          vi_intercept_armed = False
+    
         # get some easy to use accessors
         pt = pr.path_and_termination
         ft = pr.waypoint_description[3]
@@ -337,6 +347,9 @@ class Procedure:
             fix.altitude = pr.altitude1
           
           # add the fix to our set
+          if fix==None:
+            print("Warning: Adding NONE fix, 1")
+            print(pr.fix_identifier, pr.fix_section)
           routes[key].append(fix)
           
           # add the heading if we can
@@ -364,6 +377,8 @@ class Procedure:
           # first point?
           if len(routes[key]) == 0:
             # add the intercept location
+            if intercept==None:
+              print("Warning: Adding NONE fix, 2")
             routes[key].append(intercept)
           else:
             # if the previous point offers a heading, build the intercept point from that
@@ -374,7 +389,11 @@ class Procedure:
               if abs(dhdg) > 10.0 and abs(dhdg) < 170.0:
                 # build the intercept point
                 int_ll = maptools.find_intersection(prev.latlon, prev.heading, fix.latlon, pr.magnetic_course, fix.declination)
-                routes[key].append(cf.ProcedureFix(int_ll, fix.declination, None, "Computed CF Intercept", pr.altitude1, prev.heading))
+                # if we have a bad intersection (maybe behind us) that is further than we are now, just use our current point
+                curr_dist = maptools.get_dist_ll(prev.latlon, fix.latlon)
+                int_dist = maptools.get_dist_ll(int_ll, fix.latlon)
+                if int_dist < curr_dist:
+                  routes[key].append(cf.ProcedureFix(int_ll, fix.declination, None, "Computed CF Intercept", pr.altitude1, prev.heading))
             else:
               # just use the defined intercept if it isn't already near our last point
               # if our intercept point is close to the previous point, don't add it
@@ -383,6 +402,8 @@ class Procedure:
                 routes[key].append(intercept)
 
           # now add the fix
+          if fix==None:
+            print("Warning: Adding NONE fix, 3")
           routes[key].append(fix)          
           
         elif pt == "DF":
@@ -400,6 +421,8 @@ class Procedure:
             if pr.transition_identifier.rstrip() == "":
               # SID, use the airport direct to the fix
               routes[key].append(self.get_fix(pr.airport, "PA"))
+              if fix==None:
+                print("Warning: Adding NONE fix, 4")
               routes[key].append(fix)
               # all done here
               continue
@@ -415,6 +438,8 @@ class Procedure:
           
           # if the previous point doesn't have a heading, it may have been an IF...just add our new point and be done
           if prev.heading == None:
+            if fix==None:
+              print("Warning: Adding NONE fix, 5")
             routes[key].append(fix)
             self.set_current_heading(routes[key])
             continue
@@ -455,11 +480,43 @@ class Procedure:
               self.set_current_heading(routes[key])
           
           # now add the fix and heading
+          if fix==None:
+            print("Warning: Adding NONE fix, 6")
           routes[key].append(fix)
           self.set_current_heading(routes[key])
           
         elif pt == "FA":
           # Fix to an Altitude: Fix A to an altitude via a course
+          
+          # are we on an interecept?
+          if vi_intercept_armed == True:
+            # then we need to add the intercept fix before we continue
+            # get the previous point
+            prev = routes[key][-1]
+            
+            # get the fix
+            fix = self.get_fix(pr.fix_identifier, pr.fix_section)
+            
+            intercept_ll = maptools.find_intersection(prev.latlon, prev.heading, fix.latlon, pr.magnetic_course, prev.declination)
+            
+            # find the distance we traveled and altitude gained
+            dist = maptools.get_dist_ll(prev.latlon, intercept_ll) / 1852.0
+            fix_altitude = int(prev.altitude + 0.5 + dist * self.APP_5_RATE_OF_CLIMB_FPNM)
+            
+            # build our new point
+            intercept = cf.ProcedureFix(latlon=intercept_ll,
+                                      declination=prev.declination,
+                                      ident="{}".format(fix_altitude),
+                                      description="VI Intercept Point",
+                                      altitude=fix_altitude,
+                                      heading=pr.magnetic_course)
+            
+            # add our new point
+            routes[key].append(intercept)
+            
+            # all done
+            vi_intercept_armed = False
+          
           # Course to an altitude
           if len(routes[key]) > 0:
             # get the previous point as the start of our climb
@@ -557,6 +614,8 @@ class Procedure:
             rw = self.get_departure_end(pr.transition_identifier)
             
             # add this point to the list:
+            if rw==None:
+              print("Warning: Adding NONE fix, 7")
             routes[key].append(rw)
             
             # now figure how far we have to go in the climb
@@ -694,6 +753,8 @@ class Procedure:
             rw = self.get_departure_end(pr.transition_identifier)
             
             # add this point to the list:
+            if rw==None:
+              print("Warning: Adding NONE fix, 8")
             routes[key].append(rw)
             
             # now figure how far we have to go in the climb
@@ -725,39 +786,61 @@ class Procedure:
                                                pr.magnetic_course))
             
         elif pt == "VD":
+          # Heading to a distance from a DME
           # we have no starting point...this is our very first point
           if len(routes[key]) == 0:
             # Probably a runway
             rw = self.get_departure_end(pr.transition_identifier)
             
             # add this point to the list:
+            if rw==None:
+              print("Warning: Adding NONE fix, 9")
             routes[key].append(rw)
           
-          # Heading to a distance from a DME
           # get the previous point
           prev = routes[key][-1]
           
           # get the nav info
           nav = self.get_fix(pr.recommended_nav, pr.nav_section)
           
-          # get the heading from the prev to the nav
-          heading_to_nav = maptools.get_mag_heading(prev.latlon, nav.latlon, nav.declination)
-          
-          dhdg = abs(heading_to_nav - pr.magnetic_course)
-          
-          if 90.0 <= dhdg and dhdg <= 270.0:
-            # the heading to the nav and the course we are flying are opposite, we are heading away
-            outbound_course = pr.magnetic_course
+          # if the point is fully defined, just use it
+          if nav.latlon and pr.distance and pr.magnetic_course:
+            new_pos = prev.latlon
+            
+            # find our current distance
+            prev_dist = maptools.get_dist_ll(new_pos, nav.latlon) / 1852.0
+            new_dist = prev_dist
+            
+            while (new_dist < pr.distance and prev_dist < pr.distance) or (new_dist > pr.distance and prev_dist > pr.distance):
+              # setup for next time
+              prev_dist = new_dist
+              
+              # move forward a bit and check our new distance
+              new_pos = maptools.forward(new_pos, pr.magnetic_course, 0.01, prev.declination)
+              
+              # now find the DME
+              new_dist = maptools.get_dist_ll(new_pos, nav.latlon) / 1852.0
+              
+            point = new_pos
           else:
-            # we are heading towards the station
-            outbound_course = (pr.magnetic_course+180.0)%360.0
-          
-          point = maptools.forward(nav.latlon, outbound_course, pr.distance, nav.declination)
+            # get the heading from the prev to the nav
+            heading_to_nav = maptools.get_mag_heading(prev.latlon, nav.latlon, nav.declination)
+            
+            dhdg = abs(heading_to_nav - pr.magnetic_course)
+            
+            if 90.0 <= dhdg and dhdg <= 270.0:
+              # the heading to the nav and the course we are flying are opposite, we are heading away
+              outbound_course = pr.magnetic_course
+            else:
+              # we are heading towards the station
+              outbound_course = (pr.magnetic_course+180.0)%360.0
+            
+            point = maptools.forward(nav.latlon, outbound_course, pr.distance, nav.declination)
           
           # add the point
           routes[key].append(cf.ProcedureFix(point, 
                                              nav.declination, 
-                                             "{}".format(pr.altitude1), 
+                                             "{} DME={:.1f}".format(pr.recommended_nav, pr.distance), 
                                              "Heading to Distance", 
                                              pr.altitude1, 
                                              pr.magnetic_course))
@@ -780,6 +863,10 @@ class Procedure:
           if abs(dhdg) < 10.0 or abs(dhdg) > 350.0:
               prev.heading = pr.magnetic_course
               continue
+          
+          # if altitude isn't defined, try to include the previous altitude
+          if pr.altitude1 == None:
+            pr.altitude1 = prev.altitude
           
           if pr.turn_direction == "R":
             clockwise = True
@@ -808,6 +895,9 @@ class Procedure:
           
           # make sure our last point is the intercept heading
           routes[key][-1].heading = pr.magnetic_course
+          
+          # arm the intercept
+          vi_intercept_armed = True
         
         elif pt == "VM":
           # Heading to Manual Termination
@@ -816,6 +906,8 @@ class Procedure:
             rw = self.get_departure_end(pr.transition_identifier) # (lat, lon, el_ft, new_ident, declination)
             
             # add this point to the list:
+            if rw==None:
+              print("Warning: Adding NONE fix, 9")
             routes[key].append(rw)
             
           # get the starting point
@@ -827,11 +919,20 @@ class Procedure:
                                              None, 
                                              "VM Manual Termination", 
                                              point.altitude, 
-                                             None))
+                                             pr.magnetic_course))
           self.set_current_heading(routes[key])
           
         elif pt == "VR":
           # Heading to intercept a VOR radial
+          if len(routes[key]) == 0:
+            # we have no points, build one assuming the transition is a runway
+            rw = self.get_departure_end(pr.transition_identifier) # (lat, lon, el_ft, new_ident, declination)
+            
+            # add this point to the list:
+            if rw==None:
+              print("Warning: Adding NONE fix, 10")
+            routes[key].append(rw)
+            
           point = routes[key][-1]
           fix = self.get_fix(pr.recommended_nav, pr.nav_section)
           
@@ -877,12 +978,18 @@ class Procedure:
 
   def set_current_heading(self, routes):
     if len(routes) >= 2:
+      if routes[-2] == None or routes[-1] ==None:
+        print("Lat/Lon not defined")
+        print(routes[-1])
+        print(routes[-2])
+
       routes[-1].heading = maptools.get_mag_heading(routes[-2].latlon, routes[-1].latlon, routes[-1].declination)
     return
     
   def get_departure_end(self, ident):
     # is this even a runway
     if ident[:2] != "RW":
+      print("procedure.get_departure_end: IDENT is not a runway: {}".format(ident))
       return None
     
     # get the opposite runway name

@@ -162,6 +162,48 @@ class CIFPReader:
     self.kml.savefile()
     
     
+    
+    # build Airways
+    print("Building Airways")
+    airways = self.usa.get_airways()
+    
+    # build the KML structure
+    self.kml = kmlout.KMLOutput("Airways", self.outpath+"USA_Airways.kml")
+    
+    record_type_folder = {}
+    for id, fixes in airways.items():
+      first_digit = [x.isdigit() for x in id].index(True)
+      type = id[:first_digit]
+      print("{} {}".format(type, id))
+      
+      # if this type doesn't exist, create it
+      if type not in record_type_folder:
+        record_type_folder[type] = self.kml.create_folder("{}".format(type))
+      
+      # create a folder for this airway
+      airway_folder = self.kml.create_folder("{}".format(id), record_type_folder[type])
+      
+      # parse each point
+      points = []
+      for fix in fixes:
+        # add the fix to our folder
+        self.kml.add_point(airway_folder, fix[0], fix[1], fix[2])
+        
+        # do we have a huge jump?  If so, let's break the airway in two
+        if len(points):
+          dist = maptools.get_dist_ll(points[-1], fix[1])/1852.0
+        else:
+          dist = 0
+        if dist > 600.0:
+          self.kml.add_line(airway_folder, id, points, color=simplekml.Color.blue)
+          points = []
+        points.append(fix[1])
+      
+      self.kml.add_line(airway_folder, id, points, color=simplekml.Color.blue)
+    
+    self.kml.savefile()
+
+
     # build the KML structure
     self.kml = kmlout.KMLOutput("Airspace", self.outpath+"USA_Airspace.kml")
 
@@ -890,6 +932,7 @@ if __name__ == '__main__':
   
   # build select procedures for every airport with a tower in our area, plus a few others
   cifp.build_enroute_waypoints(lat_min=37.0, lat_max=41.0, lon_min=-109.0, lon_max=-102.0, outbase="CO_Enroute_Waypoints")
+  
   process_airport(cifp, "KDEN", False)
   process_airport(cifp, "KBJC", False)
   process_airport(cifp, "KEIK", False)
@@ -897,6 +940,18 @@ if __name__ == '__main__':
   process_airport(cifp, "KAPA", False)
   process_airport(cifp, "KFNL", False)
   process_airport(cifp, "KGXY", False)
+  
+  process_airport(cifp, "KCOS", False)
+  process_airport(cifp, "KASE", False)
+  process_airport(cifp, "KEGE", False)
+  process_airport(cifp, "KSLC", False)
+  process_airport(cifp, "KPHX", False)
+  process_airport(cifp, "KABQ", False)
+  process_airport(cifp, "KLAX", False)
+  process_airport(cifp, "KMCI", False)
+  process_airport(cifp, "KSTL", False)
+  process_airport(cifp, "KMSP", False)
+  
   
   # standard requests
   process_airport(cifp, "KJFK", False)
@@ -944,6 +999,9 @@ if __name__ == '__main__':
   
   process_airport(cifp, "KIND", False)  # Requested by Jason Webb jason.prime65334@gmail.com
   
+  process_airport(cifp, "KMSO", False)  # Requested by Jim De Witt dewittjim@gmail.com
+
+
   # process_airport(cifp, "", False)
   # cifp.process_terminal_waypoints("")  # Requested by
   
@@ -958,7 +1016,6 @@ if __name__ == '__main__':
   cifp = CIFPReader(cifp_path, cifp_version, 39.0, 46.0, -81.0, -72.0, "Processed_DTS")
   for airport in cifp.usa.airports.keys():
     process_airport(cifp, airport, False)
-  
   
   print("Done.")
   
