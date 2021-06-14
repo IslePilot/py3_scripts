@@ -1000,6 +1000,8 @@ if __name__ == '__main__':
   process_airport(cifp, "KIND", False)  # Requested by Jason Webb jason.prime65334@gmail.com
   
   process_airport(cifp, "KMSO", False)  # Requested by Jim De Witt dewittjim@gmail.com
+  
+  process_airport(cifp, "KSEA", False)  # Requested by Norm Pritchett normpritchett@gmail.com
 
 
   # process_airport(cifp, "", False)
