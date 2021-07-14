@@ -900,6 +900,8 @@ if __name__ == '__main__':
   # https://www.faa.gov/air_traffic/flight_info/aeronav/Aero_Data/Center_Surface_Boundaries/
   #
   # Check KFSO Runway 19...YJN may need to be added to SCAND
+  #  SCAND        YFC
+  #  SCAND        YJN   CY011580VDHW N45152093W073191664    N45152093W073191664W0160002302     NARST JEAN                       003061805
   #
   # 1. Modify paths and versions in the block below
   # 2. Run cifp_processor
@@ -915,8 +917,8 @@ if __name__ == '__main__':
   
   # when this file is run directly, run this code
   cifp_path = r"C:\Data\CIFP"
-  cifp_version = "CIFP_210617"
-  eram_version = "2021-06-17"
+  cifp_version = "CIFP_210715"
+  eram_version = "2021-07-15"
   eram_path = r"C:\Data\CIFP\ERAM"
   
   
