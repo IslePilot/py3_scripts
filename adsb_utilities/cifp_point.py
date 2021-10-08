@@ -432,6 +432,7 @@ class CIFPPoint:
     # SPACP PGROPGGRW09    0070000900 N14102878E145135249               00586000045150R                                          195061404
     # SSPAP NSASNSGRW08    0020000860 S14110237W169402216               00009000050060D                                          226531703
     # SUSAP 00ARK3GRW18    0025361765 N38582010W097360830               01328000050250D                                          753212002
+    # SUSAP 13FDK7GNW      017302     N27573597W081301408               00060000050300D                                          794892108
     # 123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012
     #          1         2         3         4         5         6         7         8         9         10        11        12        13
     self.style = self.POINT_RUNWAY
@@ -442,6 +443,25 @@ class CIFPPoint:
     self.continuation_count = record[21]
     self.length_ft = cf.parse_float(record[22:27])
     self.bearing = cf.parse_float(record[27:31], 10.0)
+    if self.bearing == None:
+      # Estimate the bearing....probably a letter
+      if self.ident == 'E    ':
+        self.bearing = 90.0
+      elif self.ident == 'W    ':
+        self.bearing = 270.0
+      elif self.ident == 'N    ':
+        self.bearing = 0.0
+      elif self.ident == 'S    ':
+        self.bearing = 180.0
+      elif self.ident == 'NE   ':
+        self.bearing = 45.0
+      elif self.ident == 'NW   ':
+        self.bearing = 315.0
+      elif self.ident == 'SE   ':
+        self.bearing = 135.0
+      elif self.ident == 'SW   ':
+        self.bearing = 225.0
+    
     self.latitude = cf.parse_lat(record[32:41])
     self.longitude = cf.parse_lon(record[41:51])
     self.elevation_ft = cf.parse_float(record[66:71])

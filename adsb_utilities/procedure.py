@@ -666,36 +666,41 @@ class Procedure:
           if len(routes[key]) >= 1:
             # get the last point as the starting point
             p1 = routes[key][-1]
+
             
             if pr.turn_direction == "R":
               clockwise = True
             else:
               clockwise = False
             
-            # get the nav we are intercepting
-            nav = self.get_fix(pr.recommended_nav, pr.nav_section)
-            nav_point = self.get_data(pr.recommended_nav, pr.nav_section)
-            
-            # are we dealing with a localizer?
-            if cp.CIFPPoint.POINT_LOCALIZER_ONLY <= nav_point.style and nav_point.style <= cp.CIFPPoint.POINT_SDF:
-              intercept_course = (nav_point.bearing+180.0)%360.0
-            else:
-              intercept_course = pr.theta
-            
-            turn_shape = maptools.turn_to_heading(p1.latlon, p1.heading, pr.magnetic_course, nav.declination, clockwise, self.APP_5_SPEED_KTS)
-            
-            # save the last point
-            p2 = turn_shape[-1]
+            # Work the turn
+            turn_shape = maptools.turn_to_heading(p1.latlon, p1.heading, pr.magnetic_course, p1.declination, clockwise, self.APP_5_SPEED_KTS)
                         
             # add our turn points
             for point in turn_shape:
-              routes[key].append(cf.ProcedureFix(point, nav.declination, None, "Turn to Heading", pr.altitude1, None))
+              routes[key].append(cf.ProcedureFix(point, p1.declination, None, "Turn to Heading", pr.altitude1, None))
               self.set_current_heading(routes[key])
-            
-            # now find the intercept point
-            intercept = maptools.find_intersection(p2, pr.magnetic_course, nav.latlon, intercept_course, nav.declination)
-            routes[key].append(cf.ProcedureFix(intercept, nav.declination, None, "Intercept", pr.altitude1, None))
             self.set_current_heading(routes[key])
+            
+            # if we have a recommended nav, we can add the intercept point too
+            if pr.recommended_nav != "":
+              # save the last point
+              p2 = turn_shape[-1]
+              
+              # get the nav we are intercepting (may not be given)
+              nav = self.get_fix(pr.recommended_nav, pr.nav_section)
+              nav_point = self.get_data(pr.recommended_nav, pr.nav_section)
+              
+              # are we dealing with a localizer?
+              if cp.CIFPPoint.POINT_LOCALIZER_ONLY <= nav_point.style and nav_point.style <= cp.CIFPPoint.POINT_SDF:
+                intercept_course = (nav_point.bearing+180.0)%360.0
+              else:
+                intercept_course = pr.theta
+              
+              # now find the intercept point
+              intercept = maptools.find_intersection(p2, pr.magnetic_course, nav.latlon, intercept_course, nav.declination)
+              routes[key].append(cf.ProcedureFix(intercept, nav.declination, None, "Intercept", pr.altitude1, None))
+              self.set_current_heading(routes[key])
         
         elif pt == "CR":
           # Course to a Radial: track a course to intercept a VOR Radial

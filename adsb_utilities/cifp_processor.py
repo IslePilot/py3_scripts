@@ -899,10 +899,6 @@ if __name__ == '__main__':
   # https://www.faa.gov/air_traffic/flight_info/aeronav/digital_products/cifp/download/
   # https://www.faa.gov/air_traffic/flight_info/aeronav/Aero_Data/Center_Surface_Boundaries/
   #
-  # Check KFSO Runway 19...YJN may need to be added to SCAND
-  #  SCAND        YFC
-  #  SCAND        YJN   CY011580VDHW N45152093W073191664    N45152093W073191664W0160002302     NARST JEAN                       003061805
-  #
   # 1. Modify paths and versions in the block below
   # 2. Run cifp_processor
   # 3. Modify zipper.py path to data and run zipper.py
@@ -917,8 +913,8 @@ if __name__ == '__main__':
   
   # when this file is run directly, run this code
   cifp_path = r"C:\Data\CIFP"
-  cifp_version = "CIFP_210812"
-  eram_version = "2021-08-12"
+  cifp_version = "CIFP_211007"
+  eram_version = "2021-10-07"
   eram_path = r"C:\Data\CIFP\ERAM"
   
   
@@ -988,8 +984,6 @@ if __name__ == '__main__':
   process_airport(cifp, "KBAD", False)  # Requested by Clay Carrington clay.carrington@hotmail.com
   process_airport(cifp, "KDYS", False)  # Requested by Clay Carrington clay.carrington@hotmail.com
   
-  process_airport(cifp, "KMSN", False)  # Requested by Dan Egan egandp@ameritech.net
-  
   process_airport(cifp, "KMDW", False)  # Requested by Don Froula
   process_airport(cifp, "KDPA", False)  # Requested by Don Froula
   process_airport(cifp, "KARR", False)  # Requested by Don Froula
@@ -1004,8 +998,18 @@ if __name__ == '__main__':
   process_airport(cifp, "KMSO", False)  # Requested by Jim De Witt dewittjim@gmail.com
   
   process_airport(cifp, "KSEA", False)  # Requested by Norm Pritchett normpritchett@gmail.com
-
-
+  
+  process_airport(cifp, "KATW", False) # Requested by Michael Melland mmelland@centurytel.net
+  process_airport(cifp, "KGRB", False) # Requested by Michael Melland mmelland@centurytel.net
+  process_airport(cifp, "KCWA", False) # Requested by Michael Melland mmelland@centurytel.net
+  process_airport(cifp, "KEAU", False) # Requested by Michael Melland mmelland@centurytel.net
+  process_airport(cifp, "KMSN", False) # Requested by Michael Melland mmelland@centurytel.net
+                                       # and by Dan Egan egandp@ameritech.net
+  process_airport(cifp, "KMKE", False) # Requested by Michael Melland mmelland@centurytel.net
+  process_airport(cifp, "KLSE", False) # Requested by Michael Melland mmelland@centurytel.net
+  process_airport(cifp, "KRHI", False) # Requested by Michael Melland mmelland@centurytel.net
+  process_airport(cifp, "KOSH", False) # Requested by Michael Melland mmelland@centurytel.net
+  
   # process_airport(cifp, "", False)
   # cifp.process_terminal_waypoints("")  # Requested by
   
