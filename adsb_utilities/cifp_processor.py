@@ -1021,8 +1021,15 @@ if __name__ == '__main__':
   process_airport(cifp, "KRHI", False) # Requested by Michael Melland mmelland@centurytel.net
   process_airport(cifp, "KOSH", False) # Requested by Michael Melland mmelland@centurytel.net
   
+  process_airport(cifp, "KHDN", False)  # Requested Chuck Kimball n0nhj@yahoo.com
+  process_airport(cifp, "KTEX", False)  # Requested Chuck Kimball n0nhj@yahoo.com
+  process_airport(cifp, "KMTJ", False)  # Requested Chuck Kimball n0nhj@yahoo.com
+  process_airport(cifp, "KGUC", False)  # Requested Chuck Kimball n0nhj@yahoo.com
+  
+  
   # process_airport(cifp, "", False)
-  # cifp.process_terminal_waypoints("")  # Requested by
+  # cifp.process_terminal_waypoints("")  
+  
   
   # Denver Area
   # lat_min = 35.5
