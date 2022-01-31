@@ -126,6 +126,7 @@ class WxDataCollector():
     hostname = config['host']
     port = int(config['port'])
     password = config['authkey'].encode()
+    print(hostname, port, password)
     read_delay = float(config['update_interval_sec'])
     
     # initialize the fence station variables
@@ -318,7 +319,7 @@ class WxDataCollector():
     # get some things in better units
     temp_f = wx.temp_c_to_f(metar_data.temp_c)
     #===========================================================================
-    # dewpoint_f = wx.temp_c_to_f(metar_data.dewpoint_c)
+    dewpoint_f = wx.temp_c_to_f(metar_data.dewpoint_c)
     wind_speed_mph = wx.speed_kt_to_mph(metar_data.wind_speed_kt)
     gust_speed_mph = wx.speed_kt_to_mph(metar_data.wind_gust_kt)
     
@@ -344,13 +345,13 @@ class WxDataCollector():
     self.data['wind_gust_mph'][0] = gust_speed_mph
     self.data['wind_direction_deg'][0] = metar_data.wind_dir_deg
     
-    # self.data['outdoor_heat_index_degF'][0] = wx.compute_heat_index(temp_f, metar_data.rh_pct)
-    # self.data['dew_point_degF'][0] = dewpoint_f
+    self.data['outdoor_heat_index_degF'][0] = wx.compute_heat_index(temp_f, metar_data.rh_pct)
+    self.data['dew_point_degF'][0] = dewpoint_f
     
     # self.data['outside_temp_degF'][0] = temp_f
-    # self.data['outside_humidity_pct'][0] = metar_data.rh_pct
+    self.data['outside_humidity_pct'][0] = metar_data.rh_pct
     
-    self.data['wind_chill_degF'][0] = wx.compute_wind_chill(temp_f, wind_speed_mph)
+    #self.data['wind_chill_degF'][0] = wx.compute_wind_chill(temp_f, wind_speed_mph)
     
     # for now, compute the baro rate from the METAR data...it will be hard from our data because
     # the update rate is high
@@ -387,14 +388,14 @@ class WxDataCollector():
     
     # now update our values
     self.data['outside_temp_degF'][0] = fence_data.temp_f
-    self.data['outside_humidity_pct'][0] = fence_data.rh_pct
-    self.data['outdoor_heat_index_degF'][0] = wx.compute_heat_index(fence_data.temp_f, fence_data.rh_pct)
+    # USE METAR self.data['outside_humidity_pct'][0] = fence_data.rh_pct
+    # USE METAR self.data['outdoor_heat_index_degF'][0] = wx.compute_heat_index(fence_data.temp_f, fence_data.rh_pct)
     
     self.data['barometer_in'][0] = fence_data.press_inhg
     
     temp_c = wx.temp_f_to_c(fence_data.temp_f)
     dewpoint_c = wx.calc_dewpoint_c(temp_c, fence_data.rh_pct)
-    self.data['dew_point_degF'][0] = wx.temp_c_to_f(dewpoint_c)
+    # USE METAR self.data['dew_point_degF'][0] = wx.temp_c_to_f(dewpoint_c)
     
     self.data['channel3_temp_degF'][0] = fence_data.cpu_temp_f
     

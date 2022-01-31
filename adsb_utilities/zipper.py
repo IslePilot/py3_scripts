@@ -51,9 +51,9 @@ if __name__ == '__main__':
   print(VERSION)
   
   # Modify this ################# vvvvvv #############
-  processed = r'C:\Data\CIFP\CIFP_211104\Processed'
-  eram = r'C:\Data\CIFP\ERAM'
-  output = r'C:\Data\CIFP\ToShare'
+  processed = r'M:\Data\CIFP\CIFP_220127\Processed'
+  eram = r'M:\Data\CIFP\ERAM'
+  output = r'M:\Data\CIFP\ToShare'
   charts = r'C:\PlanePlotter\Chartfiles'
   
   # get a list of files in the form KXXX.kml
@@ -84,19 +84,41 @@ if __name__ == '__main__':
   for f in listing:
     filetools.cp(f, output)
     filetools.cp(f, charts)
-    
-  # update chart files
-  listing = filetools.get_listing(charts, '')
-  chartlist = []
-  for f in listing:
-    chartlist.append(os.path.basename(f))
   
-  listing = filetools.get_listing(processed, '')
-  for f in listing:
+  
+  # update planeplotter charts
+  # get a list of the new files
+  new_files = filetools.get_listing(processed, '')
+  used_charts = filetools.get_listing(charts, '')
+  
+  # work through the used files to get new ones
+  for f in used_charts:
+    # get the basename of the file
     basename = os.path.basename(f)
-    if basename in chartlist:
-      print("Copying ", basename, " to charts directory")
-      filetools.cp(f, charts)
+    full_base = basename
+    
+    # if this file is a SID or STAR the filename might not match if the revision was updated, so ignore that part
+    if "SIDS" in basename or "STAR" in basename:
+      basename = basename[:-5]
+    
+    # work through all of the new files
+    for nf in new_files:
+      if basename in nf:
+        new_base = os.path.basename(nf)
+        
+        # if there is a difference, flag it for awareness
+        if full_base != new_base:
+          print("************************************************************************************")
+          print("***** REVISED SID or STAR: ", full_base, " to ", new_base)
+          print("************************************************************************************")
+          
+        # remove the existing file
+        filetools.rm(f)
+        
+        # copy over the new
+        filetools.cp(nf, charts) 
+
+        
   
     
       
