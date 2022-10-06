@@ -51,7 +51,7 @@ if __name__ == '__main__':
   print(VERSION)
   
   # Modify this ################# vvvvvv #############
-  processed = r'M:\Data\CIFP\CIFP_220127\Processed'
+  processed = r'M:\Data\CIFP\CIFP_220811\Processed'
   eram = r'M:\Data\CIFP\ERAM'
   output = r'M:\Data\CIFP\ToShare'
   charts = r'C:\PlanePlotter\Chartfiles'
