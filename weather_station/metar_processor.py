@@ -24,7 +24,7 @@ import pytz
 from multiprocessing import Process
 from multiprocessing import Array
 
-import urllib
+import urllib.request
 import bs4 as bs
 
 from collections import namedtuple
