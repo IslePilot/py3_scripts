@@ -171,17 +171,17 @@ class CIFPReader:
     self.kml = kmlout.KMLOutput("Airways", self.outpath+"USA_Airways.kml")
     
     record_type_folder = {}
-    for id, fixes in airways.items():
-      first_digit = [x.isdigit() for x in id].index(True)
-      type = id[:first_digit]
-      print("{} {}".format(type, id))
+    for airway_id, fixes in airways.items():
+      first_digit = [x.isdigit() for x in airway_id].index(True)
+      airway_type = airway_id[:first_digit]
+      print("{} {}".format(airway_type, airway_id))
       
       # if this type doesn't exist, create it
-      if type not in record_type_folder:
-        record_type_folder[type] = self.kml.create_folder("{}".format(type))
+      if airway_type not in record_type_folder:
+        record_type_folder[airway_type] = self.kml.create_folder("{}".format(airway_type))
       
       # create a folder for this airway
-      airway_folder = self.kml.create_folder("{}".format(id), record_type_folder[type])
+      airway_folder = self.kml.create_folder("{}".format(airway_id), record_type_folder[airway_type])
       
       # parse each point
       points = []
@@ -195,11 +195,11 @@ class CIFPReader:
         else:
           dist = 0
         if dist > 600.0:
-          self.kml.add_line(airway_folder, id, points, color=simplekml.Color.blue)
+          self.kml.add_line(airway_folder, airway_id, points, color=simplekml.Color.blue)
           points = []
         points.append(fix[1])
       
-      self.kml.add_line(airway_folder, id, points, color=simplekml.Color.blue)
+      self.kml.add_line(airway_folder, airway_id, points, color=simplekml.Color.blue)
     
     self.kml.savefile()
 
@@ -912,10 +912,10 @@ if __name__ == '__main__':
   
   
   # when this file is run directly, run this code
-  cifp_path = r"M:\Data\CIFP"
-  cifp_version = "CIFP_220811"
-  eram_version = "2022-08-11"
-  eram_path = r"M:\Data\CIFP\ERAM"
+  cifp_path = r"C:\Data\CIFP"
+  cifp_version = "CIFP_221103"
+  eram_version = "2022-10-06"
+  eram_path = r"C:\Data\CIFP\ERAM"
   
   
   # process the center boundaries
@@ -1010,21 +1010,30 @@ if __name__ == '__main__':
   
   process_airport(cifp, "KSEA", False)  # Requested by Norm Pritchett normpritchett@gmail.com
   
-  process_airport(cifp, "KATW", False) # Requested by Michael Melland mmelland@centurytel.net
-  process_airport(cifp, "KGRB", False) # Requested by Michael Melland mmelland@centurytel.net
-  process_airport(cifp, "KCWA", False) # Requested by Michael Melland mmelland@centurytel.net
-  process_airport(cifp, "KEAU", False) # Requested by Michael Melland mmelland@centurytel.net
-  process_airport(cifp, "KMSN", False) # Requested by Michael Melland mmelland@centurytel.net
-                                       # and by Dan Egan egandp@ameritech.net
-  process_airport(cifp, "KMKE", False) # Requested by Michael Melland mmelland@centurytel.net
-  process_airport(cifp, "KLSE", False) # Requested by Michael Melland mmelland@centurytel.net
-  process_airport(cifp, "KRHI", False) # Requested by Michael Melland mmelland@centurytel.net
-  process_airport(cifp, "KOSH", False) # Requested by Michael Melland mmelland@centurytel.net
+  process_airport(cifp, "KATW", False)  # Requested by Michael Melland mmelland@centurytel.net
+  process_airport(cifp, "KGRB", False)  # Requested by Michael Melland mmelland@centurytel.net
+  process_airport(cifp, "KCWA", False)  # Requested by Michael Melland mmelland@centurytel.net
+  process_airport(cifp, "KEAU", False)  # Requested by Michael Melland mmelland@centurytel.net
+  process_airport(cifp, "KMSN", False)  # Requested by Michael Melland mmelland@centurytel.net
+                                       	# and by Dan Egan egandp@ameritech.net
+  process_airport(cifp, "KMKE", False)  # Requested by Michael Melland mmelland@centurytel.net
+  process_airport(cifp, "KLSE", False) 	# Requested by Michael Melland mmelland@centurytel.net
+  process_airport(cifp, "KRHI", False) 	# Requested by Michael Melland mmelland@centurytel.net
+  process_airport(cifp, "KOSH", False) 	# Requested by Michael Melland mmelland@centurytel.net
   
   process_airport(cifp, "KHDN", False)  # Requested Chuck Kimball n0nhj@yahoo.com
   process_airport(cifp, "KTEX", False)  # Requested Chuck Kimball n0nhj@yahoo.com
   process_airport(cifp, "KMTJ", False)  # Requested Chuck Kimball n0nhj@yahoo.com
   process_airport(cifp, "KGUC", False)  # Requested Chuck Kimball n0nhj@yahoo.com
+  
+  process_airport(cifp, "KPHL", False)	# Requested by Terry Pavlick
+  process_airport(cifp, "KDCA", False)	# Requested by Terry Pavlick
+  process_airport(cifp, "KIAD", False)	# Requested by Terry Pavlick
+  process_airport(cifp, "KBWI", False)	# Requested by Terry Pavlick
+  process_airport(cifp, "KACY", False)	# Requested by Terry Pavlick
+  process_airport(cifp, "KADW", False)	# Requested by Terry Pavlick
+  process_airport(cifp, "KWRI", False)	# Requested by Terry Pavlick
+  process_airport(cifp, "KDOV", False)	# Requested by Terry Pavlick
   
   
   # process_airport(cifp, "", False)

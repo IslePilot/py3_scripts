@@ -51,10 +51,10 @@ if __name__ == '__main__':
   print(VERSION)
   
   # Modify this ################# vvvvvv #############
-  processed = r'M:\Data\CIFP\CIFP_220811\Processed'
-  eram = r'M:\Data\CIFP\ERAM'
-  output = r'M:\Data\CIFP\ToShare'
-  charts = r'C:\PlanePlotter\Chartfiles'
+  processed = r'C:\Data\CIFP\CIFP_221103\Processed'
+  eram = r'C:\Data\CIFP\ERAM'
+  output = r'C:\Data\CIFP\ToShare'
+  charts = r'C:\COAA\PlanePlotter\Chartfiles'
   
   # get a list of files in the form KXXX.kml
   listing = filetools.get_listing(processed, '^K\w\w\w\.kml')
