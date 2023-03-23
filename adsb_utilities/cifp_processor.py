@@ -826,6 +826,9 @@ class CIFPReader:
         new_ident += "L"
       else:
         new_ident += ident[4]
+    else:
+    	# we can't figure anything out
+    	new_ident = "RWUNK"
     
     return new_ident
 
@@ -913,8 +916,8 @@ if __name__ == '__main__':
   
   # when this file is run directly, run this code
   cifp_path = r"C:\Data\CIFP"
-  cifp_version = "CIFP_221103"
-  eram_version = "2022-10-06"
+  cifp_version = "CIFP_230323"
+  eram_version = "2023-02-23"
   eram_path = r"C:\Data\CIFP\ERAM"
   
   
@@ -1035,6 +1038,13 @@ if __name__ == '__main__':
   process_airport(cifp, "KWRI", False)	# Requested by Terry Pavlick
   process_airport(cifp, "KDOV", False)	# Requested by Terry Pavlick
   
+  process_airport(cifp, "KHRF", False)	# Requested by Jim De Witt dewittjim@gmail.com  
+  
+  process_airport(cifp, "KLBB", False)	# requested by Kevin Rush olkev@yahoo.com
+  process_airport(cifp, "KAMA", False)	# requested by Kevin Rush olkev@yahoo.com
+  process_airport(cifp, "KMAF", False)	# requested by Kevin Rush olkev@yahoo.com
+  
+  process_airport(cifp, "KRNO", False)	# requested by Andrew Averna porkwerks@icloud.com
   
   # process_airport(cifp, "", False)
   # cifp.process_terminal_waypoints("")  
