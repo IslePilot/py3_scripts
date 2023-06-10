@@ -477,10 +477,12 @@ if __name__ == '__main__':
   # when this file is run directly, run this code
   # get the basic info from the user
   print("Initializing Database...stand by")
-  rp = RouteProcessor(r"C:\Data\CIFP", "CIFP_221201")
+  cifp_ver = "CIFP_230615"
+  rp = RouteProcessor(r"C:\Data\CIFP", cifp_ver)
+  ft.mkdir(r"C:\Data\CIFP\{}\routes".format(cifp_ver))
+  route_folder = r"C:\Data\CIFP\{}\routes".format(cifp_ver)
   
-  ft.mkdir(r"C:\Data\CIFP\CIFP_221201\routes")
-  kml = kml_output.KMLOutput("Routes", r"C:\Data\CIFP\CIFP_221201\routes\routes.kml")
+  kml = kml_output.KMLOutput("Routes", "{}\\ routes.kml".format(route_folder))
   
   route = True
   while route != False:
@@ -490,7 +492,7 @@ if __name__ == '__main__':
       route_name = "{}-{}".format(route[0].ident, route[-1].ident)
       
       # build a text file for AVARE
-      txt = open(r"C:\Data\CIFP\CIFP_221201\routes\{}.txt".format(route_name), "w")
+      txt = open("{}\{}.txt".format(route_folder, route_name), "w")
       for wp in route:
         
         if wp.ident != None and wp.ident[:2] != "RW":

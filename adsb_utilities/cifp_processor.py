@@ -916,8 +916,8 @@ if __name__ == '__main__':
   
   # when this file is run directly, run this code
   cifp_path = r"C:\Data\CIFP"
-  cifp_version = "CIFP_230323"
-  eram_version = "2023-02-23"
+  cifp_version = "CIFP_230615"
+  eram_version = "2023-06-15"
   eram_path = r"C:\Data\CIFP\ERAM"
   
   
@@ -1045,6 +1045,8 @@ if __name__ == '__main__':
   process_airport(cifp, "KMAF", False)	# requested by Kevin Rush olkev@yahoo.com
   
   process_airport(cifp, "KRNO", False)	# requested by Andrew Averna porkwerks@icloud.com
+  
+  process_airport(cifp, "KTUL", False)	# requested by Brian Bland sonex128@gmail.com
   
   # process_airport(cifp, "", False)
   # cifp.process_terminal_waypoints("")  
