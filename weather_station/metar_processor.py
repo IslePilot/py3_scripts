@@ -35,7 +35,8 @@ VERSION = "1.0.2018-05-26a"
 class MetarCollector(Process):
   BAD_FLOAT = -99999.999
   
-  URL = "https://aviationweather.gov/adds/dataserver_current/httpparam?dataSource=metars&requestType=retrieve&format=xml&hoursBeforeNow=3&mostRecent=true&stationString="
+  URL= "https://aviationweather.gov/api/data/dataserver?requestType=retrieve&dataSource=metars&hoursBeforeNow=3&format=xml&mostRecent=true&stationString="
+ 
   
   # create our METAR named tuple
   field_names = ['raw_text']
@@ -209,7 +210,7 @@ class MetarCollector(Process):
     data.append(self.search_soup(soup, 'wind_dir_degrees', 'int', show=False))
     data.append(self.search_soup(soup, 'wind_speed_kt', 'int', show=False))
     data.append(self.search_soup(soup, 'wind_gust_kt', 'int', show=False))
-    data.append(self.search_soup(soup, 'visibility_statute_mi', 'float', show=False))
+    data.append(self.search_soup(soup, 'visibility_statute_mi', 'string', show=False))
     data.append(self.search_soup(soup, 'altim_in_hg', 'float', show=False))
     data.append(self.search_soup(soup, 'sea_level_pressure_mb', 'float', show=False))
     data.append(self.search_soup(soup, 'wx_string', 'string', show=False))
