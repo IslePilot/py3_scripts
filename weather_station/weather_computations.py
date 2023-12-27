@@ -46,7 +46,7 @@ def pressure_pascals_to_inhg(pressure_pascals):
 def distance_m_to_ft(distance_m):
   return distance_m/0.3048
 
-def distnace_ft_to_m(distance_f):
+def distance_ft_to_m(distance_f):
   return distance_f*0.3048
 
 def calc_vapor_saturation_pressure_hPa(temp_c):
@@ -179,6 +179,8 @@ def compute_altimeter_from_station(station_inhg, elevation_ft):
 def compute_density_altitude(pressure_inhg, temp_f):
   return 145442.16 * (1-(17.326*pressure_inhg/(459.67+temp_f))**0.235)
 
+def compute_pressure_altitude(slp_inhg, elevation_ft):
+  return (29.92-slp_inhg)*1000+elevation_ft
 
 if __name__ == '__main__':
   

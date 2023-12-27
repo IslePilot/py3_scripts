@@ -33,7 +33,7 @@ from collections import namedtuple
 from multiprocessing import Array
 
 # define a version for this file
-VERSION = "1.0.20180701a"
+VERSION = "1.0.20231226a"
 
 class WxDataCollector():
   BAD_INT = 0
@@ -50,28 +50,54 @@ class WxDataCollector():
   metar_list.append("altim_in_hg")
   METAR_DATA = namedtuple("METAR_DATA", metar_list)
   
-  fence_list = ["timestamp"]
-  fence_list.append("temp_f")
-  fence_list.append("rh_pct")
-  fence_list.append("sensor_temp_f")
-  fence_list.append("press_inhg")
-  fence_list.append("slp_inhg")
-  fence_list.append("pa_ft")
-  fence_list.append("da_ft")
-  fence_list.append("int_rain_in")
-  fence_list.append("total_rain_in")
-  fence_list.append("daily_rain_in")
-  fence_list.append("monthly_rain_in")
-  fence_list.append("cpu_temp_f")
-  FENCE_DATA = namedtuple("FENCE_DATA", fence_list)
+  #=============================================================================
+  # fence_list = ["timestamp"]
+  # fence_list.append("temp_f")
+  # fence_list.append("rh_pct")
+  # fence_list.append("sensor_temp_f")
+  # fence_list.append("press_inhg")
+  # fence_list.append("slp_inhg")
+  # fence_list.append("pa_ft")
+  # fence_list.append("da_ft")
+  # fence_list.append("int_rain_in")
+  # fence_list.append("total_rain_in")
+  # fence_list.append("daily_rain_in")
+  # fence_list.append("monthly_rain_in")
+  # fence_list.append("cpu_temp_f")
+  # FENCE_DATA = namedtuple("FENCE_DATA", fence_list)
+  #=============================================================================
   
-  roof_list = ["timestamp"]
-  roof_list.append("wind_direction")
-  roof_list.append("wind_speed_mph")
-  roof_list.append("wind_gust_mph")
-  roof_list.append("solar_insolation")
-  roof_list.append("cpu_temp_f")
-  ROOF_DATA = namedtuple("ROOF_DATA", roof_list)
+  #=============================================================================
+  # roof_list = ["timestamp"]
+  # roof_list.append("wind_direction")
+  # roof_list.append("wind_speed_mph")
+  # roof_list.append("wind_gust_mph")
+  # roof_list.append("solar_insolation")
+  # roof_list.append("cpu_temp_f")
+  # ROOF_DATA = namedtuple("ROOF_DATA", roof_list)
+  #=============================================================================
+  
+  tempest_list = ["timestamp"]
+  tempest_list.append("wind_speed_3sec_mph")
+  tempest_list.append("wind_direction_3sec_deg")
+  tempest_list.append("wind_lull_1min_mph")
+  tempest_list.append("wind_speed_1min_mph")
+  tempest_list.append("wind_gust_1min_mph")
+  tempest_list.append("wind_direction_1min_deg")
+  tempest_list.append("press_inhg")
+  tempest_list.append("slp_inhg")
+  tempest_list.append("pa_ft")
+  tempest_list.append("da_ft")
+  tempest_list.append("temp_f")
+  tempest_list.append("rh_pct")
+  tempest_list.append("solar_illuminance_lux")
+  tempest_list.append("uv_index")
+  tempest_list.append("solar_irradiance_wpm2")
+  tempest_list.append("last_minute_rain_in")
+  tempest_list.append("lightning_distance_miles")
+  tempest_list.append("lightning_count")
+  tempest_list.append("battery_v")
+  TEMPEST_DATA = namedtuple("TEMPEST_DATA", tempest_list)
   
   def __init__(self, config_file):
     # parse the config file
@@ -90,13 +116,15 @@ class WxDataCollector():
     
     # build our shared memory datasets
     self.metar_array = Array('d', len(self.metar_list))
-    self.fencestation_array = Array('d', len(self.fence_list))
+    #TEMPEST self.fencestation_array = Array('d', len(self.fence_list))
     #METAR self.roofstation_array = Array('d', len(self.roof_list))
+    self.tempest_array = Array('d', len(self.tempest_list))
     
     # instance the data collectors
     self.gather_metar_data(self.config['METAR'])
-    self.gather_fencestation_data(self.config['FENCE_STATION'])
+    #TEMPEST self.gather_fencestation_data(self.config['FENCE_STATION'])
     #METAR self.gather_roofstation_data(self.config['ROOF_STATION'])
+    self.gather_tempest_data(self.config['WEATHER_TEMPEST'])
     
     # build the data format
     self.data = OrderedDict() # native units
@@ -121,40 +149,62 @@ class WxDataCollector():
     
     return
   
-  def gather_fencestation_data(self, config):
+  def gather_tempest_data(self, config):
     # read the config
     hostname = config['host']
     port = int(config['port'])
     password = config['authkey'].encode()
+    read_delay = float(config['update_interval_sec'])
     print(hostname, port, password)
-    read_delay = float(config['update_interval_sec'])
     
-    # initialize the fence station variables
-    self.last_fence_data = []
+    # initialize the tempest variables
+    self.last_tempest_data = []
     
-    # create and run the fence station collector
-    self.fencestation_collector = txrx.MPArrayReceiver(hostname, port, password, read_delay, self.fencestation_array)
-    self.fencestation_collector.daemon = True  # run this process on its own until this process dies
-    self.fencestation_collector.start()
+    # create the tempest collector
+    self.tempest_collector = txrx.MPArrayReceiver(hostname, port, password, read_delay, self.tempest_array)
+    self.tempest_collector.daemon = True	# run this process on its own until this process dies
+    self.tempest_collector.start()
     
     return
+    
+  #=============================================================================
+  # def gather_fencestation_data(self, config):
+  #   # read the config
+  #   hostname = config['host']
+  #   port = int(config['port'])
+  #   password = config['authkey'].encode()
+  #   print(hostname, port, password)
+  #   read_delay = float(config['update_interval_sec'])
+  #   
+  #   # initialize the fence station variables
+  #   self.last_fence_data = []
+  #   
+  #   # create and run the fence station collector
+  #   self.fencestation_collector = txrx.MPArrayReceiver(hostname, port, password, read_delay, self.fencestation_array)
+  #   self.fencestation_collector.daemon = True  # run this process on its own until this process dies
+  #   self.fencestation_collector.start()
+  #   
+  #   return
+  #=============================================================================
   
-  def gather_roofstation_data(self, config):
-    # read the config
-    hostname = config['host']
-    port = int(config['port'])
-    password = config['authkey'].encode()
-    read_delay = float(config['update_interval_sec'])
-    
-    # initialize the fence station variables
-    self.last_roof_data = []
-    
-    # create and run the fence station collector
-    self.roofstation_collector = txrx.MPArrayReceiver(hostname, port, password, read_delay, self.roofstation_array)
-    self.roofstation_collector.daemon = True  # run this process on its own until this process dies
-    self.roofstation_collector.start()
-    
-    return
+  #=============================================================================
+  # def gather_roofstation_data(self, config):
+  #   # read the config
+  #   hostname = config['host']
+  #   port = int(config['port'])
+  #   password = config['authkey'].encode()
+  #   read_delay = float(config['update_interval_sec'])
+  #   
+  #   # initialize the fence station variables
+  #   self.last_roof_data = []
+  #   
+  #   # create and run the fence station collector
+  #   self.roofstation_collector = txrx.MPArrayReceiver(hostname, port, password, read_delay, self.roofstation_array)
+  #   self.roofstation_collector.daemon = True  # run this process on its own until this process dies
+  #   self.roofstation_collector.start()
+  #   
+  #   return
+  #=============================================================================
   
   def build_data_format(self):
     self.data['version'] = [1.01, "{:.2f},", "Version"]
@@ -168,16 +218,16 @@ class WxDataCollector():
     self.data['second'] = [WxDataCollector.BAD_INT, "{:d},", "Second"]  # local clock
     
     # from anemometer and vane
-    self.data['wind_speed_mph'] = [WxDataCollector.BAD_FLOAT, "{:.2f},", "Wind Speed (mph)"]  # Roof Station
-    self.data['wind_gust_mph'] = [WxDataCollector.BAD_FLOAT, "{:.2f},", "Wind Gust (mph)"]  # Roof Station
-    self.data['wind_direction_deg'] = [WxDataCollector.BAD_FLOAT, "{:.2f},", "Wind Direction (true deg)"]  # Roof Station
+    self.data['wind_speed_mph'] = [WxDataCollector.BAD_FLOAT, "{:.2f},", "Wind Speed (mph)"]  # Tempest
+    self.data['wind_gust_mph'] = [WxDataCollector.BAD_FLOAT, "{:.2f},", "Wind Gust (mph)"]  # Tempest
+    self.data['wind_direction_deg'] = [WxDataCollector.BAD_FLOAT, "{:.2f},", "Wind Direction (true deg)"]  # Tempest
     
     # from sensors
     self.data['inside_humidity_pct'] = [WxDataCollector.BAD_FLOAT, "{:.2f},", "Inside Humidity (%)"]
-    self.data['outside_humidity_pct'] = [WxDataCollector.BAD_FLOAT, "{:.2f},", "Outside Humidity (%)"]  # Fence Station
+    self.data['outside_humidity_pct'] = [WxDataCollector.BAD_FLOAT, "{:.2f},", "Outside Humidity (%)"]  # Tempest
     self.data['inside_temp_degF'] = [WxDataCollector.BAD_FLOAT, "{:.2f},", "Inside Temperature (deg F)"]
-    self.data['outside_temp_degF'] = [WxDataCollector.BAD_FLOAT, "{:.2f},", "Outside Temperature (deg F)"]  # Fence Station
-    self.data['barometer_in'] = [29.92, "{:.2f},", "Sea Level Pressure (in Hg)"]  # Fence Station
+    self.data['outside_temp_degF'] = [WxDataCollector.BAD_FLOAT, "{:.2f},", "Outside Temperature (deg F)"]  # Tempest
+    self.data['barometer_in'] = [29.92, "{:.2f},", "Sea Level Pressure (in Hg)"]  # Tempest
     
     # from rain gauge
     self.data['total_rain_in'] = [WxDataCollector.BAD_FLOAT, "{:.2f},", "Total Rain (in)"]
@@ -197,22 +247,22 @@ class WxDataCollector():
     
     # not used
     self.data['evapotransporation'] = [WxDataCollector.BAD_FLOAT, "{:.2f},", "Evapotranspiration (in)"]
-    self.data['uv_index'] = [WxDataCollector.BAD_FLOAT, "{:.2f},", "UV Index"]
+    self.data['uv_index'] = [WxDataCollector.BAD_FLOAT, "{:.2f},", "UV Index"] # Tempest
     
     # from pyranometer
-    self.data['solar_radiation'] = [WxDataCollector.BAD_FLOAT, "{:.2f},", "Solar Radiation (W/m**2)"] # Roof Station
+    self.data['solar_radiation'] = [WxDataCollector.BAD_FLOAT, "{:.2f},", "Solar Radiation (W/m**2)"] # Tempest
     
     # computed
-    self.data['wind_chill_degF'] = [WxDataCollector.BAD_FLOAT, "{:.2f},", "Wind Chill (deg F)"]  # Fence Station and Roof Station
+    self.data['wind_chill_degF'] = [WxDataCollector.BAD_FLOAT, "{:.2f},", "Wind Chill (deg F)"]  # Tempest
     self.data['indoor_heat_index_degF'] = [WxDataCollector.BAD_FLOAT, "{:.2f},", "Indoor Heat Index (deg F)"]
-    self.data['outdoor_heat_index_degF'] = [WxDataCollector.BAD_FLOAT, "{:.2f},", "Outdoor Heat Index (deg F)"]  # Fence Station
-    self.data['dew_point_degF'] = [WxDataCollector.BAD_FLOAT, "{:.2f},", "Dew Point (deg F)"]  # METAR for now # Fence Station
+    self.data['outdoor_heat_index_degF'] = [WxDataCollector.BAD_FLOAT, "{:.2f},", "Outdoor Heat Index (deg F)"]  # Tempest
+    self.data['dew_point_degF'] = [WxDataCollector.BAD_FLOAT, "{:.2f},", "Dew Point (deg F)"]  # Tempest
     
     # rates from data
-    self.data['rain_rate_in_per_hour'] = [WxDataCollector.BAD_FLOAT, "{:.2f},", "Rain Rate (in/hr)"]  # Fence Station
-    self.data['outdoor_temp_rate_degF_per_hour'] = [WxDataCollector.BAD_FLOAT, "{:.2f},", "Outdoor Temp Rate (deg F/hr)"] # Fence Station
+    self.data['rain_rate_in_per_hour'] = [WxDataCollector.BAD_FLOAT, "{:.2f},", "Rain Rate (in/hr)"]  # Tempest
+    self.data['outdoor_temp_rate_degF_per_hour'] = [WxDataCollector.BAD_FLOAT, "{:.2f},", "Outdoor Temp Rate (deg F/hr)"] # Tempest
     self.data['indoor_temp_rate_degF_per_hour'] = [WxDataCollector.BAD_FLOAT, "{:.2f},", "Indoor Temp Rate (deg F/hr)"]
-    self.data['barometer_rate_in_per_hour'] = [WxDataCollector.BAD_FLOAT, "{:.2f},", "Barometer Rate"]  # Fence Station
+    self.data['barometer_rate_in_per_hour'] = [WxDataCollector.BAD_FLOAT, "{:.2f},", "Barometer Rate"]  # Tempest
     self.data['channel1_temp_rate_degF_per_hour'] = [WxDataCollector.BAD_FLOAT, "{:.2f},", "Ch1 Temp Rate (deg F/hr)"]  # METAR
     self.data['channel2_temp_rate_degF_per_hour'] = [WxDataCollector.BAD_FLOAT, "{:.2f},", "Ch2 Temp Rate (deg F/hr)"] # Roof Station
     self.data['channel3_temp_rate_degF_per_hour'] = [WxDataCollector.BAD_FLOAT, "{:.2f},", "Ch3 Temp Rate (deg F/hr)"] # Fence Station
@@ -234,8 +284,11 @@ class WxDataCollector():
       # get the latest metar data from the closest location
       self._get_metar()
       
+      # get the latest tempest data
+      self._get_tempest()
+      
       # get the latest fence station data
-      self._get_fence_station()
+      #TEMPEST self._get_fence_station()
       
       # get the lastest roof station data
       #METAR self._get_roof_station()
@@ -319,12 +372,12 @@ class WxDataCollector():
     # get some things in better units
     temp_f = wx.temp_c_to_f(metar_data.temp_c)
     #===========================================================================
-    dewpoint_f = wx.temp_c_to_f(metar_data.dewpoint_c)
+    #dewpoint_f = wx.temp_c_to_f(metar_data.dewpoint_c)
     wind_speed_mph = wx.speed_kt_to_mph(metar_data.wind_speed_kt)
     gust_speed_mph = wx.speed_kt_to_mph(metar_data.wind_gust_kt)
     
     # save this for wind chill computations
-    self.wind_speed_mph = wind_speed_mph
+    #self.wind_speed_mph = wind_speed_mph
     #===========================================================================
     
     # values we always want to get from the METAR data
@@ -341,15 +394,16 @@ class WxDataCollector():
     
     # these values will be replaced with our sensors when available
     print("METAR wind {} @ {:0.2f} Gusting {:0.2f}".format(metar_data.wind_dir_deg, wind_speed_mph, gust_speed_mph))
-    self.data['wind_speed_mph'][0] = wind_speed_mph
-    self.data['wind_gust_mph'][0] = gust_speed_mph
-    self.data['wind_direction_deg'][0] = metar_data.wind_dir_deg
     
-    self.data['outdoor_heat_index_degF'][0] = wx.compute_heat_index(temp_f, metar_data.rh_pct)
-    self.data['dew_point_degF'][0] = dewpoint_f
+    # USE TEMPEST self.data['wind_speed_mph'][0] = wind_speed_mph
+    # USE TEMPEST self.data['wind_gust_mph'][0] = gust_speed_mph
+    # USE TEMPEST self.data['wind_direction_deg'][0] = metar_data.wind_dir_deg
+    
+    # USE TEMPEST self.data['outdoor_heat_index_degF'][0] = wx.compute_heat_index(temp_f, metar_data.rh_pct)
+    # USE TEMPEST self.data['dew_point_degF'][0] = dewpoint_f
     
     # self.data['outside_temp_degF'][0] = temp_f
-    self.data['outside_humidity_pct'][0] = metar_data.rh_pct
+    # USE TEMPEST self.data['outside_humidity_pct'][0] = metar_data.rh_pct
     
     #self.data['wind_chill_degF'][0] = wx.compute_wind_chill(temp_f, wind_speed_mph)
     
@@ -370,6 +424,49 @@ class WxDataCollector():
     
     return
   
+  
+  def _get_tempest(self):
+    # get the latest tempest data
+    with self.tempest_array.get_lock():
+      temp = self.tempest_array[:]
+    
+    # build the named tuple
+    tempest_data = self.TEMPEST_DATA(*temp)
+    
+    # only proceed if we have real data
+    if round(tempest_data.timestamp) == 0:
+      return 
+    
+    # if the timestamp didn't change, nothing changed, so we are done
+    if len(self.last_tempest_data) != 0 and tempest_data.timestamp == self.last_tempest_data[-1].timestamp:
+      return 
+    
+    # now update our values
+    # direct measurements
+    self.data['outside_humidity_pct'][0] = tempest_data.rh_pct
+    self.data['outside_temp_degF'][0] = tempest_data.temp_f
+    self.data['barometer_in'][0] = tempest_data.press_inhg
+    self.data['uv_index'][0] = tempest_data.uv_index
+    self.data['solar_radiation'][0] = tempest_data.solar_irradiance_wpm2
+    self.data['wind_speed_mph'][0] = tempest_data.wind_speed_3sec_mph
+    self.data['wind_direction_deg'][0] = tempest_data.wind_direction_3sec_deg
+    self.data['wind_gust_mph'][0] = tempest_data.wind_gust_1min_mph
+    
+    # computed values
+    self.data['outdoor_heat_index_degF'][0] = wx.compute_heat_index(tempest_data.temp_f, tempest_data.rh_pct)
+    
+    temp_c = wx.temp_f_to_c(tempest_data.temp_f)
+    dewpoint_c = wx.calc_dewpoint_c(temp_c, tempest_data.rh_pct)
+    self.data['dew_point_degF'][0] = wx.temp_c_to_f(dewpoint_c)
+    
+    self.data['wind_chill_degF'][0] = wx.compute_wind_chill(tempest_data.temp_f, tempest_data.wind_speed_1min_mph)
+    
+   
+    
+    
+    
+    return
+  
   def _get_fence_station(self):
     # get the latest fencestation data
     with self.fencestation_array.get_lock():
@@ -387,11 +484,11 @@ class WxDataCollector():
       return
     
     # now update our values
-    self.data['outside_temp_degF'][0] = fence_data.temp_f
+    # USE TEMPEST self.data['outside_temp_degF'][0] = fence_data.temp_f
     # USE METAR self.data['outside_humidity_pct'][0] = fence_data.rh_pct
     # USE METAR self.data['outdoor_heat_index_degF'][0] = wx.compute_heat_index(fence_data.temp_f, fence_data.rh_pct)
     
-    self.data['barometer_in'][0] = fence_data.press_inhg
+    # USE TEMPEST self.data['barometer_in'][0] = fence_data.press_inhg
     
     temp_c = wx.temp_f_to_c(fence_data.temp_f)
     dewpoint_c = wx.calc_dewpoint_c(temp_c, fence_data.rh_pct)
@@ -400,8 +497,8 @@ class WxDataCollector():
     self.data['channel3_temp_degF'][0] = fence_data.cpu_temp_f
     
     # compute the wind chill if we can
-    if self.wind_speed_mph != None:
-      self.data['wind_chill_degF'][0] = wx.compute_wind_chill(fence_data.temp_f, self.wind_speed_mph)
+    #if self.wind_speed_mph != None:
+      # USE TEMPEST self.data['wind_chill_degF'][0] = wx.compute_wind_chill(fence_data.temp_f, self.wind_speed_mph)
     
     datatime = datetime.datetime.fromtimestamp(fence_data.timestamp, tz=pytz.UTC)
     print("==========================================================================")
