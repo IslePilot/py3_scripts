@@ -38,7 +38,7 @@ from multiprocessing import Array
 import weather_computations as wxcomp
 
 # define a version for this file
-VERSION = "1.0.20231226a"
+VERSION = "1.0.20231227a"
 
 class WeatherTempest():
   def __init__(self, station_elevation_ft):
@@ -85,8 +85,8 @@ class WeatherTempest():
     m = self.sock.recvfrom(1024)
     
     # get the transmitter info
-    ip, port = m[1]
-    print("Packet Received from {}:{}".format(ip, port))
+    #ip, port = m[1]
+    #print("Packet Received from {}:{}".format(ip, port))
     
     # parse the data
     wx_dict = json.loads(m[0])
@@ -96,7 +96,7 @@ class WeatherTempest():
       self.timestamp = datetime.datetime.fromtimestamp(rapid_wind_obs_list[0])
       self.wind_speed_3sec_mph = rapid_wind_obs_list[1]*2.236936292 # from m/s to mph
       self.wind_direction_3sec_deg = rapid_wind_obs_list[2]
-      if True:
+      if False:
         print("Rapid Wind Observation")
         print("----------------------")
         print("     Time: {}".format(self.timestamp.strftime("%Y-%m-%d %H:%M:%S")))
@@ -114,7 +114,7 @@ class WeatherTempest():
       self.temp_f = wxcomp.temp_c_to_f(obs_list[7])
       obs_wind_interval = obs_list[5]
       self.press_inhg = obs_list[6]/33.8639 # from mbar to inHg
-      self.slp_inhg = wxcomp.compute_slp_from_station(self.press_inhg, self.z_ft, obs_list[7])
+      self.slp_inhg = wxcomp.compute_slp_from_station(self.press_inhg, self.z_ft, obs_list[7])-0.05 # Calibration Factor
       self.pa_ft = wxcomp.compute_pressure_altitude(self.slp_inhg, self.z_ft)
       self.da_ft = wxcomp.compute_density_altitude(self.press_inhg, self.temp_f)
       self.rh_pct = obs_list[8]
@@ -127,7 +127,7 @@ class WeatherTempest():
       self.lightning_count = obs_list[15]
       self.battery_v = obs_list[16]
       obs_rep_interval = obs_list[17]
-      if True:
+      if False:
         print("Weather Observation")
         print("-------------------")
         print("           Time: {}".format(self.timestamp.strftime("%Y-%m-%d %H:%M:%S")))
@@ -215,11 +215,10 @@ class WeatherTempest():
   #=============================================================================
 
 
-def signal_handler(signal, frame):
+def signal_handler(__signal, __frame):
   """Called by the signal handler when Control C is pressed"""
   print("TempestReader.py:  You pressed Ctrl-c.  Exiting.")
   # set the flag to terminate the rain gauge monitoring thread, and wait for it to close
-  rain.RAINWISE_TERMINATE_REQUEST = True
   time.sleep(1.0)
   
   # exit cleanly
@@ -452,10 +451,18 @@ if __name__ == '__main__':
     # show the user what we got
     print("=============================================================")
     print("{:s}:".format(str_time))
-    print("Wind: {}@{:.1f} Gusting {:.1f}".format(tempest.wind_direction_3sec_deg, tempest.wind_speed_3sec_mph, tempest.wind_gust_1min_mph))
-    print("Temperature(F):{:.2f} Humidity(%):{:.1f} ".format(tempest.temp_f, tempest.rh_pct))
-    print("Pressure(inHg):{:.2f} Sea-Level Pressure(inHg):{:.2f}".format(tempest.press_inhg, tempest.slp_inhg))
-    print("Pressure Altitude:{:.1f} Density Altitude:{:.1f}".format(tempest.pa_ft, tempest.da_ft))
+    print(" 3 second wind: {:3.0f}°@{:4.1f} mph".format(tempest.wind_direction_3sec_deg, tempest.wind_speed_3sec_mph))
+    print(" 1 minute wind: {:3.0f}°@{:4.1f} mph Gusts {:4.1f} mph (Min: {:4.1f} mph".format(tempest.wind_direction_1min_deg, 
+                                                                             tempest.wind_speed_1min_mph, 
+                                                                             tempest.wind_gust_1min_mph,
+                                                                             tempest.wind_lull_1min_mph))
+    print("Temperature:{:.2f} °F Humidity:{:.1f}% ".format(tempest.temp_f, tempest.rh_pct))
+    print("Pressure:{:.2f} inHg Sea-Level Pressure:{:.2f} inHg".format(tempest.press_inhg, tempest.slp_inhg))
+    print("Pressure Altitude:{:.1f} ft Density Altitude:{:.1f} ft".format(tempest.pa_ft, tempest.da_ft))
+    print("Illuminance:{:.2f} lux UV Index:{:.2f} Radiation:{:.1f} W/m^2".format(tempest.solar_illuminance_lux,
+                                                                                 tempest.uv_index,
+                                                                                 tempest.solar_irradiance_wpm2))
     print("New Rain:{:.2f} Daily Rain:{:.2f} Montly Rain:{:.2f} Total Rain:{:.2f}".format(interval_rain_in, rain_today, monthly_rain, total_rain_in))
+    print("Lightning Distance: {} miles Lightning Count: {}".format(tempest.lightning_distance_miles, tempest.lightning_count))
     print("Battery Voltage:{:.3f}".format(tempest.battery_v))
 

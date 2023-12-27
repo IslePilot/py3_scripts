@@ -438,7 +438,7 @@ class WxDataCollector():
       return 
     
     # if the timestamp didn't change, nothing changed, so we are done
-    if len(self.last_tempest_data) != 0 and tempest_data.timestamp == self.last_tempest_data[-1].timestamp:
+    if len(self.last_tempest_data) != 0 and tempest_data.timestamp == self.last_tempest_data.timestamp:
       return 
     
     # now update our values
@@ -461,9 +461,8 @@ class WxDataCollector():
     
     self.data['wind_chill_degF'][0] = wx.compute_wind_chill(tempest_data.temp_f, tempest_data.wind_speed_1min_mph)
     
-   
-    
-    
+    # save the data we need for the next update
+    self.last_tempest_data = tempest_data
     
     return
   
@@ -491,7 +490,7 @@ class WxDataCollector():
     # USE TEMPEST self.data['barometer_in'][0] = fence_data.press_inhg
     
     temp_c = wx.temp_f_to_c(fence_data.temp_f)
-    dewpoint_c = wx.calc_dewpoint_c(temp_c, fence_data.rh_pct)
+    #dewpoint_c = wx.calc_dewpoint_c(temp_c, fence_data.rh_pct)
     # USE METAR self.data['dew_point_degF'][0] = wx.temp_c_to_f(dewpoint_c)
     
     self.data['channel3_temp_degF'][0] = fence_data.cpu_temp_f
