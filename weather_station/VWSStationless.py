@@ -455,9 +455,10 @@ class WxDataCollector():
     # computed values
     self.data['outdoor_heat_index_degF'][0] = wx.compute_heat_index(tempest_data.temp_f, tempest_data.rh_pct)
     
-    temp_c = wx.temp_f_to_c(tempest_data.temp_f)
-    dewpoint_c = wx.calc_dewpoint_c(temp_c, tempest_data.rh_pct)
-    self.data['dew_point_degF'][0] = wx.temp_c_to_f(dewpoint_c)
+    if tempest_data.rh_pct > 0.01:
+      temp_c = wx.temp_f_to_c(tempest_data.temp_f)
+      dewpoint_c = wx.calc_dewpoint_c(temp_c, tempest_data.rh_pct)
+      self.data['dew_point_degF'][0] = wx.temp_c_to_f(dewpoint_c)
     
     self.data['wind_chill_degF'][0] = wx.compute_wind_chill(tempest_data.temp_f, tempest_data.wind_speed_1min_mph)
     

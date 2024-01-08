@@ -76,7 +76,7 @@ class WeatherTempest():
     if self.new_rain == True:
       print(">>>>>>>>>>> New Rain Detected: {} inches <<<<<<<<<<<".format(self.last_minute_rain_in))
       self.new_rain = False 
-      return self.last_miniute_rain_in
+      return self.last_minute_rain_in
     else:
       return 0.0
     
@@ -114,7 +114,7 @@ class WeatherTempest():
       self.temp_f = wxcomp.temp_c_to_f(obs_list[7])
       obs_wind_interval = obs_list[5]
       self.press_inhg = obs_list[6]/33.8639 # from mbar to inHg
-      self.slp_inhg = wxcomp.compute_slp_from_station(self.press_inhg, self.z_ft, obs_list[7])-0.05 # Calibration Factor
+      self.slp_inhg = wxcomp.compute_slp_from_station(self.press_inhg, self.z_ft, obs_list[7])-0.02 # Calibration Factor
       self.pa_ft = wxcomp.compute_pressure_altitude(self.slp_inhg, self.z_ft)
       self.da_ft = wxcomp.compute_density_altitude(self.press_inhg, self.temp_f)
       self.rh_pct = obs_list[8]
@@ -452,7 +452,7 @@ if __name__ == '__main__':
     print("=============================================================")
     print("{:s}:".format(str_time))
     print(" 3 second wind: {:3.0f}°@{:4.1f} mph".format(tempest.wind_direction_3sec_deg, tempest.wind_speed_3sec_mph))
-    print(" 1 minute wind: {:3.0f}°@{:4.1f} mph Gusts {:4.1f} mph (Min: {:4.1f} mph".format(tempest.wind_direction_1min_deg, 
+    print(" 1 minute wind: {:3.0f}°@{:4.1f} mph Gusts {:4.1f} mph (Min: {:4.1f} mph)".format(tempest.wind_direction_1min_deg, 
                                                                              tempest.wind_speed_1min_mph, 
                                                                              tempest.wind_gust_1min_mph,
                                                                              tempest.wind_lull_1min_mph))
