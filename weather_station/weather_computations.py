@@ -61,10 +61,10 @@ def calc_vapor_saturation_pressure_hPa(temp_c):
   C5 = -15.9618719
   C6 = 1.80122502
   
-  Tn = 273.16 # triple cifp_point temperature, K
-  Pn = 6.11657  # vapor pressure at triple cifp_point temperature, hPa
-  A0 = -13.928169
-  A1 = 34.707823
+  #Tn = 273.16 # triple cifp_point temperature, K
+  #Pn = 6.11657  # vapor pressure at triple cifp_point temperature, hPa
+  #A0 = -13.928169
+  #A1 = 34.707823
   
   
   # get the temp in Kelvin
@@ -76,8 +76,19 @@ def calc_vapor_saturation_pressure_hPa(temp_c):
     return Pc * math.exp((Tc*(C1*v + C2*v**1.5 + C3*v**3 + C4*v**3.5 + C5*v**4 + C6*v**7.5))/temp_k)
   
   else:
-    theta = temp_k / Tn
-    return Pn * math.exp(A0*(1-theta**-1.5) + A1*(1-theta**-1.25))
+    #theta = temp_k / Tn
+    #return Pn * math.exp(A0*(1-theta**-1.5) + A1*(1-theta**-1.25))
+    
+    # valid for temp -70 to 0C
+    a = 6.114742
+    m = 9.778707
+    Tn = 273.1466
+    
+    mt = m*temp_c
+    tptn = temp_c+Tn 
+    div = mt/tptn
+    pws = a*10**div
+    return pws
   
 def calc_dewpoint_c(temp_c, rh_pct):
   """Compute the dewpoint in deg C
@@ -113,7 +124,11 @@ def calc_dewpoint_c(temp_c, rh_pct):
   return
 
 def calc_rh_pct(temp_c, dewpoint_c):
-  return 100.0 * calc_vapor_saturation_pressure_hPa(dewpoint_c)/calc_vapor_saturation_pressure_hPa(temp_c)
+  rh = 100.0 * calc_vapor_saturation_pressure_hPa(dewpoint_c)/calc_vapor_saturation_pressure_hPa(temp_c)
+  return rh
+  #dp = (17.625*dewpoint_c)/(243.04+dewpoint_c)
+  #t = (17.625*temp_c)/(243.04+temp_c)
+  #return 100.0 * math.exp(dp)/math.exp(t)
 
 def compute_wind_chill(temp_f, wind_speed_mph):
   return 35.74 + (0.6215*temp_f) - (35.75*wind_speed_mph**0.16) + (0.4275*temp_f*wind_speed_mph**0.16)
