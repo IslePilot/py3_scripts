@@ -94,9 +94,13 @@ class WxDataCollector():
   tempest_list.append("uv_index")
   tempest_list.append("solar_irradiance_wpm2")
   tempest_list.append("last_minute_rain_in")
+  tempest_list.append("annual_rain_in")
+  tempest_list.append("daily_rain_in")
+  tempest_list.append("monthly_rain_in")
   tempest_list.append("lightning_distance_miles")
   tempest_list.append("lightning_count")
   tempest_list.append("battery_v")
+  
   TEMPEST_DATA = namedtuple("TEMPEST_DATA", tempest_list)
   
   def __init__(self, config_file):
@@ -230,7 +234,7 @@ class WxDataCollector():
     self.data['barometer_in'] = [29.92, "{:.2f},", "Sea Level Pressure (in Hg)"]  # Tempest
     
     # from rain gauge
-    self.data['total_rain_in'] = [WxDataCollector.BAD_FLOAT, "{:.2f},", "Total Rain (in)"]
+    self.data['total_rain_in'] = [WxDataCollector.BAD_FLOAT, "{:.11f},", "Interval Rain (in)"]
     self.data['daily_rain_in'] = [WxDataCollector.BAD_FLOAT, "{:.2f},", "Daily Rain (in)"]
     self.data['hourly_rain_in'] = [WxDataCollector.BAD_FLOAT, "{:.2f},", "Hourly Rain (in)"]  # Fence Station
     
@@ -438,7 +442,7 @@ class WxDataCollector():
       return 
     
     # if the timestamp didn't change, nothing changed, so we are done
-    if len(self.last_tempest_data) != 0 and tempest_data.timestamp == self.last_tempest_data.timestamp:
+    if len(self.last_tempest_data) != 0 and tempest_data.timestamp == self.last_tempest_data[-1].timestamp:
       return 
     
     # now update our values
@@ -463,8 +467,65 @@ class WxDataCollector():
     self.data['wind_chill_degF'][0] = wx.compute_wind_chill(tempest_data.temp_f, tempest_data.wind_speed_1min_mph)
     
     # save the data we need for the next update
-    self.last_tempest_data = tempest_data
+    self.last_tempest_data.append(tempest_data)
+   
+    # keep the last 60 minutes of data in memory
+    self.last_tempest_data = [d for d in self.last_tempest_data if tempest_data.timestamp-d.timestamp < 3600.0]
     
+    # compute the length of our history
+    history_sec = self.last_tempest_data[-1].timestamp - self.last_tempest_data[0].timestamp
+    
+    # only proceed if we have ~1 minutes or more of data
+    if history_sec < 60.0:
+      return
+    
+    # we have enough history data, compute our multiplier
+    multiplier = 3600.0 / history_sec
+    
+    # build lists containing a specified amount of time
+    sec060 = [d for d in self.last_tempest_data if tempest_data.timestamp-d.timestamp < 60.0]
+    sec150 = [d for d in self.last_tempest_data if tempest_data.timestamp-d.timestamp < 150.0]
+    sec300 = [d for d in self.last_tempest_data if tempest_data.timestamp-d.timestamp < 300.0]
+    sec600 = [d for d in self.last_tempest_data if tempest_data.timestamp-d.timestamp < 600.0]
+    sec900 = [d for d in self.last_tempest_data if tempest_data.timestamp-d.timestamp < 900.0]
+
+    # get the temperature change rate
+    temp900 = sec900[-1].temp_f - sec900[0].temp_f
+    self.data['outdoor_temp_rate_degF_per_hour'][0] = temp900 * 4
+    
+    # find the amount of rain in each time period
+    rain060 = sec060[-1].annual_rain_in - sec060[0].annual_rain_in
+    rain150 = sec150[-1].annual_rain_in - sec150[0].annual_rain_in
+    rain300 = sec300[-1].annual_rain_in - sec300[0].annual_rain_in
+    rain600 = sec600[-1].annual_rain_in - sec600[0].annual_rain_in
+    rain900 = sec900[-1].annual_rain_in - sec900[0].annual_rain_in
+    rain_hr = self.last_tempest_data[-1].annual_rain_in - self.last_tempest_data[0].annual_rain_in
+    
+    if rain060 >= 0.02:
+      rate = rain060 * 60
+    elif rain150 >= 0.02:
+      rate = rain150 * 24
+    elif rain300 >= 0.02:
+      rate = rain300 * 12
+    elif rain600 >= 0.02:
+      rate = rain600 * 6
+    elif rain900 >= 0.02:
+      rate = rain900 * 4
+    else:
+      rate = rain_hr * multiplier
+    # set our hourly rain rate
+    self.data['rain_rate_in_per_hour'][0] = rate
+    
+    # set the amount of hourly rain
+    self.data['hourly_rain_in'][0] = rain_hr
+    
+    self.data['total_rain_in'][0] = self.last_tempest_data[-1].annual_rain_in
+    self.data['daily_rain_in'][0] = self.last_tempest_data[-1].daily_rain_in
+    self.data['monthly_rain_in'][0] = self.last_tempest_data[-1].monthly_rain_in
+    self.data['yearly_rain_in'][0] = self.last_tempest_data[-1].annual_rain_in
+    
+    self.data['barometer_rate_in_per_hour'][0] = (sec900[-1].slp_inhg - sec900[0].slp_inhg)*4.0
+
     return
   
   def _get_fence_station(self):

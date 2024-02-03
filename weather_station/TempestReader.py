@@ -64,6 +64,9 @@ class WeatherTempest():
     self.uv_index = 0.0
     self.solar_irradiance_wpm2 = 0.0
     self.last_minute_rain_in = 0.0
+    self.annual_rain_in = 0.0
+    self.daily_rain_in = 0.0
+    self.monthly_rain_in = 0.0
     self.lightning_distance_miles = 0
     self.lightning_count = 0
     self.battery_v = 0
@@ -73,6 +76,8 @@ class WeatherTempest():
     return 
   
   def get_new_rain(self):
+    # this function makes sure last_minute_rain_in is only used once....it could be filled in for a full minute and
+    # we don't want to double count it
     if self.new_rain == True:
       print(">>>>>>>>>>> New Rain Detected: {} inches <<<<<<<<<<<".format(self.last_minute_rain_in))
       self.new_rain = False 
@@ -121,7 +126,7 @@ class WeatherTempest():
       self.solar_illuminance_lux = obs_list[9]
       self.uv_index = obs_list[10]
       self.solar_irradiance_wpm2 = obs_list[11]
-      self.last_minute_rain_in = obs_list[12]/25.4
+      self.last_minute_rain_in = obs_list[12]/25.4  # smallest value is very small!  0.000001 mm = 3.937e-8 in
       obs_rain_type = obs_list[13]
       self.lightning_distance_miles = obs_list[14]/1.609344
       self.lightning_count = obs_list[15]
@@ -316,7 +321,7 @@ def save_new_rain_total(total_rain_in, new_rain_in, daily_rain_in, monthly_rain_
   rain_file = "C:\\WX\\RainData\\{:d}_RainTotal.txt".format(timenow.year)
 
   # build our new value
-  data_string = "{:s},{:.2f},{:.2f},{:.2f}\n".format(timenow.strftime("%Y-%m-%d %H:%M:%S.%f"), total_rain_in, monthly_rain_in, daily_rain_in)
+  data_string = "{:s},{:.12f},{:.12f},{:.12f}\n".format(timenow.strftime("%Y-%m-%d %H:%M:%S.%f"), total_rain_in, monthly_rain_in, daily_rain_in)
   print("Adding to rain file: {:s}".format(data_string))
   
   # append the string to the file
@@ -364,7 +369,7 @@ if __name__ == '__main__':
   epoch = datetime.datetime(1970, 1, 1, tzinfo=pytz.UTC)
 
   # create a shared array of doubles
-  data = Array('d', 20)
+  data = Array('d', 23)
 
   dataserver = txrx.MPArrayServer(hostname, port, authkey, data)
   dataserver.daemon = True  # run until this process dies
@@ -443,10 +448,13 @@ if __name__ == '__main__':
         data[13] = tempest.solar_illuminance_lux
         data[14] = tempest.uv_index
         data[15] = tempest.solar_irradiance_wpm2
-        data[16] = tempest.last_minute_rain_in
-        data[17] = tempest.lightning_distance_miles
-        data[18] = tempest.lightning_count
-        data[19] = tempest.battery_v
+        data[16] = interval_rain_in
+        data[17] = annual_rain
+        data[18] = rain_today
+        data[19] = monthly_rain
+        data[20] = tempest.lightning_distance_miles
+        data[21] = tempest.lightning_count
+        data[22] = tempest.battery_v
 
     # show the user what we got
     print("=============================================================")
