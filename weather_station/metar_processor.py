@@ -269,7 +269,10 @@ class MetarCollector(Process):
       return val
     
     elif fmt == 'int':
-      val = int(text)
+      if text == 'VRB':
+        val = 0
+      else:
+        val = int(text)
       if show:
         print("{:s}:".format(tag), val)
       return val

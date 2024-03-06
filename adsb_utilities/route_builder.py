@@ -477,7 +477,7 @@ if __name__ == '__main__':
   # when this file is run directly, run this code
   # get the basic info from the user
   print("Initializing Database...stand by")
-  cifp_ver = "CIFP_230713"
+  cifp_ver = "CIFP_240222"
   rp = RouteProcessor(r"C:\Data\CIFP", cifp_ver)
   ft.mkdir(r"C:\Data\CIFP\{}\routes".format(cifp_ver))
   route_folder = r"C:\Data\CIFP\{}\routes".format(cifp_ver)
