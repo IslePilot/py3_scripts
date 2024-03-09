@@ -1047,6 +1047,9 @@ if __name__ == '__main__':
   process_airport(cifp, "KRNO", False)	# requested by Andrew Averna porkwerks@icloud.com
   
   process_airport(cifp, "KTUL", False)	# requested by Brian Bland sonex128@gmail.com
+  
+  process_airport(cifp, "KSJC", False)  # requested by Daniel Rich drich@employees.org
+  process_airport(cifp, "KOAK", False)  # requested by Daniel Rich drich@employees.org
 
   
   # process_airport(cifp, "", False)
