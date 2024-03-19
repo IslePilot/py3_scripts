@@ -19,6 +19,7 @@ sys.path.append("..")
 
 import struct
 import socket
+import time
 
 from multiprocessing import Process, Array
 
@@ -136,7 +137,7 @@ if __name__ == '__main__':
 
     # now build new messages forever
     while True:
-        timestr = datetime.datetime.now(pytz.UTC).strftime("%Y-%m-%d %H:%M:%S.%f")
+        timestr = datetime.datetime.now(pytz.UTC).strftime("%Y-%m-%d %H:%M:%S.%f").encode()
         sequence += 1
 
         print(sender, timestr, sequence)
