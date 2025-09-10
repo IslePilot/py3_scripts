@@ -42,7 +42,7 @@ modes = { zipfile.ZIP_DEFLATED: 'deflated',
           }
 
 # define a version for this file
-VERSION = "1.0"
+VERSION = "1.20240326a"
 
 
 
@@ -51,13 +51,13 @@ if __name__ == '__main__':
   print(VERSION)
   
   # Modify this ################# vvvvvv #############
-  processed = r'C:\Data\CIFP\CIFP_240222\Processed'
+  processed = r'C:\Data\CIFP\CIFP_250220\Processed'
   eram = r'C:\Data\CIFP\ERAM'
   output = r'C:\Data\CIFP\ToShare'
   charts = r'C:\COAA\PlanePlotter\Chartfiles'
   
   # get a list of files in the form KXXX.kml
-  listing = filetools.get_listing(processed, '^K\w\w\w\.kml')
+  listing = filetools.get_listing(processed, r'^K\w\w\w\.kml')
   ids = []
   for f in listing:
     base = os.path.basename(f)

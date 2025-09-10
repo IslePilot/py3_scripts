@@ -22,7 +22,7 @@ import subprocess
 import time
 
 # define a version for this file
-VERSION = "1.0.20200323a"
+VERSION = "1.0.202403216a"
 
 raw_dir = r"C:\Temp\Wx_Raw"
 image_file = r"\\roofpi\share\timelapse\image.jpg"
@@ -45,10 +45,10 @@ if __name__ == '__main__':
     listing = filetools.get_listing(raw_dir, r"\.jpg")
     
     # scp the files to the server
-    subprocess.run(["C:\Program Files\PuTTY\pscp.exe",
-                    "-P", "4830",
-                    "C:\Temp\Wx_Raw\*.jpg", 
-                    "keithbarr@droplet1.colorado-barrs.com:/home/keithbarr/public_html/wx"])
+    subprocess.run([r"C:\Program Files\PuTTY\pscp.exe",
+                    r"-P", "4830",
+                    r"C:\Temp\Wx_Raw\*.jpg", 
+                    r"keithbarr@droplet1.colorado-barrs.com:/home/keithbarr/public_html/wx"])
 
 
   

@@ -257,7 +257,7 @@ class MetarCollector(Process):
     
     elif fmt == 'utc':
       # this is a time string, parse it into an aware datetime, example: 2018-05-27T19:17:00Z
-      obs_time = datetime.datetime.strptime(text, "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=pytz.UTC)
+      obs_time = datetime.datetime.strptime(text, "%Y-%m-%dT%H:%M:%S.000Z").replace(tzinfo=pytz.UTC)
       if show:
         print("{:s}:".format(tag), obs_time.strftime("%Y-%m-%d %H:%M:%S %Z"))
       return obs_time
@@ -281,7 +281,7 @@ class MetarCollector(Process):
       data = []
       for item in items:
         data.append(item['sky_cover'])
-        if data[-1] != 'CLR' and data[-1] != 'SKC' and data[-1] != 'CAVOK':
+        if data[-1] != 'CLR' and data[-1] != 'SKC' and data[-1] != 'CAVOK' and data[-1] != 'FZFG':
           data.append(float(item['cloud_base_ft_agl']))
         else:
           data.append(None)

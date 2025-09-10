@@ -916,8 +916,8 @@ if __name__ == '__main__':
   
   # when this file is run directly, run this code
   cifp_path = r"C:\Data\CIFP"
-  cifp_version = "CIFP_240222"
-  eram_version = "2024-02-22"
+  cifp_version = "CIFP_250220"
+  eram_version = "2025-02-20"
   eram_path = r"C:\Data\CIFP\ERAM"
   
   

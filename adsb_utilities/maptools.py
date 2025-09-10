@@ -456,6 +456,11 @@ def build_tangent_to_fix(pt1, heading, fix, tas_knots, clockwise):
   # so we have a right triangle.  There are two triangles actually and we need to figure out which one is right
   # each triangle has a hypotenuse of dist (the distance from the fix to the center), and a leg of radius r, so
   # find the angle from the ctr-fix line and the radials
+  if radius_m > dist:
+    print("possible error here....")
+    print(radius_m, dist)
+    radius_m = dist
+  
   ctr_ang = math.degrees(math.acos(radius_m/dist))
   
   # the radials to the tangent points are at the ctr-fix azimuth plus and minus the ctr_ang
