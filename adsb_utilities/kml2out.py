@@ -94,7 +94,7 @@ if __name__ == '__main__':
   # 7 - White
   # 8 - Gray
   
-  path = "C:\\Data\\DEN"
+  path = "C:\\Data\\PlanePlotter\\DEN"
   build_out(path, "CO_Airports", 2)
   build_out(path, "CO_Airspace", 6)
   build_out(path, "CO_Interstates", 4)
